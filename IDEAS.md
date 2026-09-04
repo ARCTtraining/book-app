@@ -87,17 +87,11 @@ and surfacing enough to act on. **An hour.**
 
 ## 2. Cheap, and worth doing
 
-### Add a book by URL or ISBN
+> **Done:** adding a book by ISBN or by pasting its Google Books link. Three
+> books in one session were unreachable by any text query — *For Emma*
+> (Ewan Morrison) and the Penguin *Nero* among them — and both resolve
+> instantly by identifier.
 
-Google Books search cannot reach some volumes at all. The Penguin edition of
-*Nero* (`ARXS0AEACAAJ`) is absent from every query form I tried — `intitle:`,
-`inauthor:`, ISBN — yet the volume endpoint returns it complete with 416
-pages.
-
-Pasting a books.google.com URL or an ISBN would have solved that, and both
-the times you came to me with a book you could not find. The lookup already
-exists; it needs an input that recognises a URL or ISBN and fetches by id.
-**Two hours.**
 
 ### Let a book have a page count you set
 

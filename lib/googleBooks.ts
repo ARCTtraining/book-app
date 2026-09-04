@@ -321,6 +321,84 @@ export async function hydratePageCounts(
   );
 }
 
+/* Direct lookup ------------------------------------------------------------ */
+
+/**
+ * What a query turns out to be, when it is not words.
+ *
+ * Text search cannot reach every volume Google holds. "For Emma" by Ewan
+ * Morrison and the Penguin edition of "Nero" are both absent from every
+ * phrasing tried — `intitle:`, `inauthor:`, the title with the author — yet
+ * both come back complete when asked for by identifier. Pasting the ISBN or
+ * the books.google.com link is the only route to them.
+ */
+export type Lookup =
+  | { kind: "volume"; id: string }
+  | { kind: "isbn"; isbn: string };
+
+/** Google volume ids are a short opaque token in the URL's last segment. */
+const VOLUME_ID = /^[A-Za-z0-9_-]{8,20}$/;
+
+function validIsbn(digits: string): boolean {
+  if (digits.length === 13) {
+    const sum = [...digits].reduce(
+      (total, d, i) => total + Number(d) * (i % 2 ? 3 : 1),
+      0
+    );
+    return sum % 10 === 0;
+  }
+  if (digits.length === 10) {
+    const sum = [...digits].reduce((total, c, i) => {
+      const value = c === "X" || c === "x" ? 10 : Number(c);
+      return total + value * (10 - i);
+    }, 0);
+    return sum % 11 === 0;
+  }
+  return false;
+}
+
+/**
+ * Recognises an ISBN or a Google Books link in what was typed.
+ *
+ * Returns null for ordinary words, which stay a text search. The checksum is
+ * verified so a long number that happens to be thirteen digits is not
+ * mistaken for a book.
+ */
+export function parseLookup(query: string): Lookup | null {
+  const text = query.trim();
+  if (!text) return null;
+
+  // A pasted link: .../books/edition/<slug>/<id>, or ?id=<id>.
+  if (/books\.google\.[a-z.]+/i.test(text) || text.includes("/books/edition/")) {
+    const fromParam = text.match(/[?&]id=([A-Za-z0-9_-]+)/);
+    if (fromParam) return { kind: "volume", id: fromParam[1] };
+
+    const path = text.split("?")[0].replace(/\/+$/, "");
+    const last = path.slice(path.lastIndexOf("/") + 1);
+    if (VOLUME_ID.test(last)) return { kind: "volume", id: last };
+  }
+
+  // An ISBN, however it was punctuated.
+  const digits = text.replace(/[\s-]/g, "");
+  if (/^\d{13}$|^\d{9}[\dXx]$/.test(digits) && validIsbn(digits)) {
+    return { kind: "isbn", isbn: digits };
+  }
+
+  return null;
+}
+
+/** Fetches one volume by id, mapped like any search result. */
+async function lookupVolume(
+  id: string,
+  apiKey: string,
+  fetchImpl: typeof fetch
+): Promise<CatalogBook[]> {
+  const volume = await fetchVolume(id, apiKey, fetchImpl);
+  if (!volume) return [];
+  const book = mapVolume(volume);
+  return book && isTrackable(book) ? [book] : [];
+}
+
 export class GoogleBooksError extends Error {
   constructor(
     message: string,
@@ -342,8 +420,15 @@ export async function searchGoogleBooks(
 ): Promise<CatalogBook[]> {
   const { maxResults = 24, fetchImpl = fetch } = options;
 
+  // An ISBN or a pasted link asks for one exact book, and reaches volumes
+  // that text search cannot.
+  const lookup = parseLookup(query);
+  if (lookup?.kind === "volume") {
+    return lookupVolume(lookup.id, apiKey, fetchImpl);
+  }
+
   const url = new URL(GOOGLE_BOOKS_ENDPOINT);
-  url.searchParams.set("q", query);
+  url.searchParams.set("q", lookup ? `isbn:${lookup.isbn}` : query);
   url.searchParams.set("maxResults", String(Math.min(maxResults, 40)));
   url.searchParams.set("printType", "books");
   url.searchParams.set("key", apiKey);

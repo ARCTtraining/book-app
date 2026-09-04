@@ -9,6 +9,7 @@ import {
   isTrackable,
   mapVolume,
   normalizeGenre,
+  parseLookup,
   searchGoogleBooks,
   toCatalogBooks,
   type GoogleVolume,
@@ -441,5 +442,99 @@ describe("searchGoogleBooks", () => {
     } as unknown as Response);
 
     expect(await searchGoogleBooks("zzz", "K", { fetchImpl })).toEqual([]);
+  });
+});
+
+describe("parseLookup", () => {
+  it("reads a volume id out of a books.google URL", () => {
+    // The link a reader copies from the address bar.
+    expect(
+      parseLookup("https://www.google.co.uk/books/edition/For_Emma/f69OEQAAQBAJ?hl=en")
+    ).toEqual({ kind: "volume", id: "f69OEQAAQBAJ" });
+  });
+
+  it("reads the older ?id= link form", () => {
+    expect(parseLookup("https://books.google.com/books?id=Gq5g0QEACAAJ&hl=en")).toEqual({
+      kind: "volume",
+      id: "Gq5g0QEACAAJ",
+    });
+  });
+
+  it("reads an ISBN however it is punctuated", () => {
+    const expected = { kind: "isbn", isbn: "9781914090974" };
+    expect(parseLookup("9781914090974")).toEqual(expected);
+    expect(parseLookup("978-1-914090-97-4")).toEqual(expected);
+    expect(parseLookup("  978 1 914090 97 4 ")).toEqual(expected);
+  });
+
+  it("accepts a 10-digit ISBN, including a trailing X", () => {
+    expect(parseLookup("0306406152")).toEqual({ kind: "isbn", isbn: "0306406152" });
+    expect(parseLookup("043942089X")).toEqual({ kind: "isbn", isbn: "043942089X" });
+  });
+
+  it("rejects a number that is merely thirteen digits long", () => {
+    // The checksum is what stops a phone number becoming a book.
+    expect(parseLookup("1234567890123")).toBeNull();
+  });
+
+  it("leaves ordinary words alone", () => {
+    expect(parseLookup("for emma")).toBeNull();
+    expect(parseLookup("Ewan Morrison")).toBeNull();
+    expect(parseLookup("")).toBeNull();
+    expect(parseLookup("   ")).toBeNull();
+  });
+});
+
+describe("searchGoogleBooks with a direct lookup", () => {
+  const detail = (info: object) =>
+    ({ ok: true, status: 200, json: async () => ({ id: "vol", volumeInfo: info }) }) as unknown as Response;
+
+  it("fetches the volume endpoint for a pasted link", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      detail({ title: "For Emma", authors: ["Ewan Morrison"], pageCount: 420 })
+    );
+    const books = await searchGoogleBooks(
+      "https://www.google.co.uk/books/edition/For_Emma/f69OEQAAQBAJ",
+      "K",
+      { fetchImpl }
+    );
+
+    const url = fetchImpl.mock.calls[0][0] as string;
+    expect(url).toContain("/volumes/f69OEQAAQBAJ");
+    expect(books).toHaveLength(1);
+    expect(books[0].title).toBe("For Emma");
+  });
+
+  it("turns an ISBN into an isbn: query, which text search cannot reach", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        items: [{ id: "vol", volumeInfo: { title: "For Emma", pageCount: 420 } }],
+      }),
+    } as unknown as Response);
+
+    await searchGoogleBooks("978-1-914090-97-4", "K", { fetchImpl });
+    const url = new URL(fetchImpl.mock.calls[0][0] as string);
+    expect(url.searchParams.get("q")).toBe("isbn:9781914090974");
+  });
+
+  it("still runs a text search for ordinary words", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ items: [] }),
+    } as unknown as Response);
+
+    await searchGoogleBooks("for emma", "K", { fetchImpl });
+    const url = new URL(fetchImpl.mock.calls[0][0] as string);
+    expect(url.searchParams.get("q")).toBe("for emma");
+  });
+
+  it("returns nothing when the link points at a book with no page count", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(detail({ title: "Untrackable" }));
+    expect(
+      await searchGoogleBooks("https://books.google.com/books?id=abc123def", "K", {
+        fetchImpl,
+      })
+    ).toEqual([]);
   });
 });

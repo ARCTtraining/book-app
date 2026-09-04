@@ -49,7 +49,7 @@ export function SearchScreen() {
   }, [query]);
 
   const caption = !query
-    ? "Search Google Books by title or author"
+    ? "Search by title or author — or paste an ISBN or Google Books link"
     : pending
       ? "Searching…"
       : `${books.length} ${books.length === 1 ? "match" : "matches"} for “${query}”`;
@@ -66,7 +66,7 @@ export function SearchScreen() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Title, author or genre"
+            placeholder="Title, author, ISBN or a Google Books link"
             aria-label="Search the catalogue"
             enterKeyHint="search"
             autoComplete="off"
@@ -104,14 +104,14 @@ export function SearchScreen() {
           {!query && (
             <EmptyState
               title="What are you reading?"
-              body="Search by title or author to add a book to your shelf — or record one you have already finished."
+              body="Search by title or author to add a book to your shelf, or record one you have already finished. Some books are only reachable by ISBN or by pasting their Google Books link."
             />
           )}
 
           {query && !pending && books.length === 0 && (
             <EmptyState
               title="No matches"
-              body={`Nothing matches “${query}”. Try an author's surname, or fewer words.`}
+              body={`Nothing matches “${query}”. Try an author's surname, fewer words, or the book's ISBN — small-press and very recent titles are often only findable that way.`}
             />
           )}
         </div>
