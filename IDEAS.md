@@ -13,28 +13,50 @@ Ordered by what I would do first, not by size.
 
 These are defects, not enhancements. They are live.
 
-### The streak cannot work for a backfilled shelf
+### ~~The streak cannot work for a backfilled shelf~~ — resolved by habit
 
-Your 21 books produced **20 progress logs across 20 distinct days** — one per
-book, on the day it was finished. A streak counts consecutive days with a
-log, so it can only ever read 1.
+The 21 backfilled books produced 20 logs on 20 distinct days, so the streak
+could only ever read 1. **Decided: no code change.** Logging daily from here
+makes it correct within days, because the streak counts back from today and
+leaves the isolated historical days behind it.
 
-The streak was designed for a reader logging pages as they go. Backfilling a
-year of reading was added later, and the two do not fit together: a book read
-over three weeks contributes a single day.
+Worth knowing: `longest` is computed over all history, so it will read 1 until
+a genuine run beats it. That is accurate, not a bug.
 
-Options, roughly in order of honesty:
+### Backfilled pages land in the wrong month, and that does not self-heal
 
-- **Credit the reading span.** A book started on the 13th and finished on the
-  17th counts as five reading days, not one. Truthful, and makes the streak
-  meaningful the moment you backfill. Changes what a "log" means, so it
-  touches `streaks.ts`, the seed, and the chart.
-- **Say what the streak is for.** Keep it as-is but label it "days you logged
-  pages" so a 1 is not read as a rebuke.
-- **Drop it.** It is the weakest feature on the shelf for someone whose
-  reading is recorded after the fact.
+The same root cause as the streak, but this half does **not** fix itself,
+because it is about history rather than habit.
 
-*I would credit the span.* The data to do it is already stored.
+A backfilled book writes one log on its finish date carrying the whole book.
+**8 of your 19 finished books span a month boundary** — 42% — and every page
+is credited to the month it finished in. *Undermajordomo Minor* ran 12 March
+to 14 April over 33 days; all 280 pages sit in April.
+
+What that costs the chart:
+
+| | Mar | Apr | May | Jun | Jul | Aug |
+| --- | --- | --- | --- | --- | --- | --- |
+| Charted now | 465 | 664 | 553 | 1044 | 732 | 1092 |
+| Spread over the span | 704 | 504 | 742 | 758 | 1016 | 808 |
+| Off by | −239 | +160 | −189 | +286 | −284 | +284 |
+
+March is understated by a third. June and August are inflated by the books
+that were mostly read in May and July.
+
+New reading logged daily will be accurate, so this only ever concerns the
+backfilled year — but that year does not correct itself, and it is the year
+the chart currently shows.
+
+**Decided: leave it.** 2026 is lumpy because it was reconstructed; 2027 will
+be right. The totals, book counts, pace and reading record are all correct
+either way — only the monthly shape is distorted, and only for the backfilled
+year.
+
+If it ever becomes worth fixing, the change is to spread a backfilled book's
+pages across its reading span at an even daily rate, plus a migration for
+books already entered. **Half a day.** It invents daily detail that was never
+recorded, which would need saying plainly somewhere in the UI.
 
 ### Author names do not match themselves
 
@@ -221,7 +243,7 @@ Recorded so they do not get re-proposed.
 
 ## If you only do three things
 
-1. **Fix the streak** so a backfilled shelf produces a truthful number.
-2. **Repair author names**, so the reading record can be believed.
-3. **Add notes and ratings**, so there is a reason to open the app between
+1. **Fix the streak** so a backfilled shelf produces a truthful number. // i will log daily (or when i read going forward) so this will fix itself.
+2. **Repair author names**, so the reading record can be believed. // Not too fussed.
+3. **Add notes and ratings**, so there is a reason to open the app between // this can be done at some point.
    page updates.
