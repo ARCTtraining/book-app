@@ -241,9 +241,17 @@ Recorded so they do not get re-proposed.
 
 ---
 
-## If you only do three things
+## Where this leaves the shortlist
 
-1. **Fix the streak** so a backfilled shelf produces a truthful number. // i will log daily (or when i read going forward) so this will fix itself.
-2. **Repair author names**, so the reading record can be believed. // Not too fussed.
-3. **Add notes and ratings**, so there is a reason to open the app between // this can be done at some point.
-   page updates.
+Triaged against how the app is actually being used, rather than what looked
+important while building it.
+
+| | Verdict |
+| --- | --- |
+| **Fix the streak** | **Not needed.** Logging daily from here fixes it without code. |
+| **Repair author names** | **Low priority.** Noted, not fussed about. It only affects the most-read-author row. |
+| **Notes and ratings** | **Someday.** The largest remaining feature, and the one that gives the app a reason to be opened between page updates. |
+| **Show when a device is out of step** | **Now the strongest candidate.** It is the only item on the list that was hit in practice rather than predicted — books added on the laptop, absent on the phone, with nothing in the app saying so. An hour's work. |
+
+Everything here is a working document. The decisions recorded above were taken
+deliberately and can be revisited once the app has been lived with for longer.
