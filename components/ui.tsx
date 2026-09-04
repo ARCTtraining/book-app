@@ -33,6 +33,49 @@ export function StampMark({ size = 26 }: { size?: number }) {
 }
 
 /**
+ * A book's cover, or a blank in its place.
+ *
+ * Always renders something so rows stay aligned whether or not the
+ * catalogue has an image. Bordered and square-cornered like everything
+ * else — no shadow, no floating card.
+ */
+export function Cover({
+  url,
+  size = "sm",
+}: {
+  url?: string;
+  size?: "sm" | "md";
+}) {
+  const box = size === "md" ? "h-[66px] w-[44px]" : "h-[54px] w-9";
+
+  // Google appends a page-curl flourish to its thumbnails, which reads as
+  // clutter at this size.
+  const src = url?.replace(/&edge=curl/g, "");
+
+  return (
+    <div
+      className={cx(
+        "shrink-0 overflow-hidden rounded-card border border-rule bg-paper-dark",
+        box
+      )}
+    >
+      {src && (
+        // Decorative: the title sits alongside, so a screen reader gains
+        // nothing from a second copy of it.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          className="size-full object-cover"
+        />
+      )}
+    </div>
+  );
+}
+
+/**
  * The core motif: a hairline-bordered card with a coloured spine strip down
  * the left edge, like a book on a shelf or a tab on a catalogue card.
  */

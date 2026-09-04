@@ -1,5 +1,6 @@
 "use client";
 
+import type { InsightsSummary } from "@/lib/types";
 import { useLibrary } from "./LibraryProvider";
 import { PagesByMonthChart } from "./charts/PagesByMonthChart";
 import { cx, EmptyState, LoadingRules, PageTitle } from "./ui";
@@ -84,8 +85,79 @@ export function InsightsScreen() {
         </div>
 
         <PagesByMonthChart data={insights.pagesByMonth} />
+        <ReadingRecord record={insights.record} />
       </div>
     </>
+  );
+}
+
+/**
+ * Facts about the shelf, stated rather than plotted.
+ *
+ * These are the things a chart would say worse: one number, one name, no
+ * axis needed. Rows with nothing to report are left out entirely rather
+ * than shown as a dash.
+ */
+function ReadingRecord({ record }: { record: InsightsSummary["record"] }) {
+  const rows: { label: string; value: string; note?: string }[] = [];
+
+  for (const { author, books } of record.topAuthors) {
+    rows.push({ label: "Most read", value: author, note: `${books} books` });
+  }
+  if (record.longestBook) {
+    rows.push({
+      label: "Longest book",
+      value: record.longestBook.title,
+      note: `${record.longestBook.pageCount} pp`,
+    });
+  }
+  if (record.averagePageCount > 0) {
+    rows.push({ label: "Average book", value: `${record.averagePageCount} pp` });
+  }
+  if (record.fastestFinish) {
+    rows.push({
+      label: "Fastest finish",
+      value: record.fastestFinish.title,
+      note: `${record.fastestFinish.days} ${record.fastestFinish.days === 1 ? "day" : "days"}`,
+    });
+  }
+  if (record.averageDaysToFinish > 0) {
+    rows.push({
+      label: "Average to finish",
+      value: `${record.averageDaysToFinish} days`,
+    });
+  }
+  if (record.pagesPerReadingDay > 0) {
+    rows.push({
+      label: "While reading",
+      value: `${record.pagesPerReadingDay} pp / day`,
+      note: "days inside a book",
+    });
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="rounded-card border border-rule bg-paper-dark/60 px-3 pt-3 pb-1">
+      <h2 className="label-caps font-sans text-ink">Reading record</h2>
+      <dl className="mt-2 divide-y divide-rule">
+        {rows.map((row, i) => (
+          <div key={`${row.label}-${i}`} className="flex items-baseline gap-3 py-2">
+            <dt className="label-caps shrink-0 text-charcoal/55">{row.label}</dt>
+            <dd className="ml-auto min-w-0 text-right">
+              <span className="tnum block truncate text-[13px] text-ink">
+                {row.value}
+              </span>
+              {row.note && (
+                <span className="tnum block text-[11px] text-charcoal/55">
+                  {row.note}
+                </span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

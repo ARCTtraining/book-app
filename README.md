@@ -14,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 156 unit tests over lib/ (vitest)
+npm test             # 165 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -44,7 +44,7 @@ without being re-seeded, every screen still renders with the network cut for
 | ----------- | --------------------------------------------------------------- |
 | `/`         | Shelf — streak counter, currently reading, want to read, finished |
 | `/search`   | Live Google Books search, with the sample catalogue as fallback   |
-| `/insights` | Four stat tiles, pages-by-month line, books-by-genre bars         |
+| `/insights` | Five stat tiles, pages-by-month line, and a reading record        |
 | `/settings` | Placeholder reminders, daily goal, data reset, about             |
 
 The streak counts consecutive local calendar days with at least one page
@@ -61,6 +61,11 @@ future date or a finish before the start.
 Calendar days are stored as midday-local instants. Local midnight converted to
 UTC lands on the previous day east of Greenwich, which would display a book
 finished on the 1st as the 31st.
+
+Insights draws its figures from the reader's own record — dates, page counts,
+authors — rather than catalogue metadata. A books-by-genre chart was tried and
+removed: across sixteen real books Google Books returns three categories
+(`Fiction`, `History`, `Castles`), which is too coarse to carry an insight.
 
 ## Design system
 

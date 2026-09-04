@@ -9,6 +9,7 @@ import { useLibrary } from "./LibraryProvider";
 import { DateFields } from "./DateFields";
 import {
   Button,
+  Cover,
   DateStamp,
   IndexCard,
   MetaLine,
@@ -61,8 +62,13 @@ export function SearchResultCard({ book }: { book: CatalogBook }) {
 
   return (
     <IndexCard spine={spineColor(book.genre)}>
-      <BookHeading book={book} />
-      <MetaLine items={[`${book.pageCount} pp`, book.genre, book.year?.toString()]} />
+      <div className="flex gap-3">
+        <Cover url={book.thumbnailUrl} size="md" />
+        <div className="min-w-0 flex-1">
+          <BookHeading book={book} />
+          <MetaLine items={[`${book.pageCount} pp`, book.genre, book.year?.toString()]} />
+        </div>
+      </div>
 
       {book.blurb && (
         // Clamped as well as trimmed: catalogue blurbs vary wildly in length
@@ -156,8 +162,11 @@ export function CurrentlyReadingCard({ entry }: { entry: ShelfEntry }) {
 
   return (
     <IndexCard spine={spineColor(entry.book.genre)} tone="alt">
-      <div className="flex items-start justify-between gap-3">
-        <BookHeading book={entry.book} />
+      <div className="flex items-start gap-3">
+        <Cover url={entry.book.thumbnailUrl} size="md" />
+        <div className="min-w-0 flex-1">
+          <BookHeading book={entry.book} />
+        </div>
         <span className="tnum label-caps shrink-0 pt-0.5 text-charcoal/55">
           {progressPercent({ ...entry, currentPage: draft })}%
         </span>
@@ -219,7 +228,8 @@ export function WantToReadCard({ entry }: { entry: ShelfEntry }) {
   return (
     <IndexCard spine={spineColor(entry.book.genre)}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <Cover url={entry.book.thumbnailUrl} />
+        <div className="min-w-0 flex-1">
           <BookHeading book={entry.book} size="sm" />
           <MetaLine items={[`${entry.book.pageCount} pp`, entry.book.genre]} />
         </div>
@@ -260,7 +270,8 @@ export function FinishedCard({ entry }: { entry: ShelfEntry }) {
   return (
     <IndexCard spine={spineColor(entry.book.genre)}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <Cover url={entry.book.thumbnailUrl} />
+        <div className="min-w-0 flex-1">
           <BookHeading book={entry.book} size="sm" />
           {/* Genre is left to the spine here — the date range is the point of
               a finished card, and three items wrapped to a second line. */}

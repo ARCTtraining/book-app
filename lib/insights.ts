@@ -1,5 +1,6 @@
 import type { InsightsSummary, LibraryState } from "./types";
 import {
+  dayOf,
   daysBetween,
   monthKey,
   monthLabel,
@@ -53,6 +54,7 @@ export function computeInsights(
     year: Number(today.slice(0, 4)),
     booksOnShelf,
     pagesByMonth: pagesByMonth(state, today),
+    record: readingRecord(state),
   };
 }
 
@@ -96,6 +98,76 @@ function avgPagesPerDay(state: LibraryState, today: DayKey): number {
   const divisor = Math.max(1, Math.min(PACE_WINDOW_DAYS, age));
 
   return Math.round(pages / divisor);
+}
+
+/**
+ * How long a book took, in days, or null if the dates do not allow it.
+ *
+ * Floors at one day: a book started and finished on the same date took a
+ * day's reading, not none, and a zero would divide badly.
+ */
+function daysToFinish(entry: LibraryState["entries"][number]): number | null {
+  const started = dayOf(entry.startedAt);
+  const finished = dayOf(entry.finishedAt);
+  if (!started || !finished) return null;
+  return Math.max(1, daysBetween(started, finished));
+}
+
+/**
+ * The facts about a shelf that are worth stating outright.
+ *
+ * Everything here comes from the reader's own record — dates, page counts,
+ * authors — rather than from catalogue metadata. That is deliberate: the
+ * genre chart this replaced failed because Google Books returns three
+ * categories for a whole year of reading.
+ */
+function readingRecord(state: LibraryState): InsightsSummary["record"] {
+  const finished = state.entries.filter((e) => e.status === "finished");
+
+  const byAuthor = new Map<string, number>();
+  for (const entry of finished) {
+    const author = entry.book.author;
+    byAuthor.set(author, (byAuthor.get(author) ?? 0) + 1);
+  }
+  const topAuthors = [...byAuthor.entries()]
+    .filter(([, books]) => books > 1)
+    .map(([author, books]) => ({ author, books }))
+    .sort((a, b) => b.books - a.books || a.author.localeCompare(b.author))
+    .slice(0, 3);
+
+  const longest = finished.reduce<(typeof finished)[number] | null>(
+    (best, entry) => (!best || entry.book.pageCount > best.book.pageCount ? entry : best),
+    null
+  );
+
+  const timed = finished
+    .map((entry) => ({ entry, days: daysToFinish(entry) }))
+    .filter((x): x is { entry: (typeof finished)[number]; days: number } => x.days !== null);
+
+  const fastest = timed.reduce<(typeof timed)[number] | null>(
+    (best, x) => (!best || x.days < best.days ? x : best),
+    null
+  );
+
+  const totalDays = timed.reduce((sum, x) => sum + x.days, 0);
+  const pagesWhileReading = timed.reduce((sum, x) => sum + x.entry.book.pageCount, 0);
+
+  return {
+    topAuthors,
+    averagePageCount: finished.length
+      ? Math.round(finished.reduce((s, e) => s + e.book.pageCount, 0) / finished.length)
+      : 0,
+    longestBook: longest
+      ? { title: longest.book.title, pageCount: longest.book.pageCount }
+      : null,
+    averageDaysToFinish: timed.length ? Math.round(totalDays / timed.length) : 0,
+    fastestFinish: fastest
+      ? { title: fastest.entry.book.title, days: fastest.days }
+      : null,
+    // Pages per day spent inside a book, as opposed to per calendar day —
+    // the difference between the two is how much of the year you were reading.
+    pagesPerReadingDay: totalDays ? Math.round(pagesWhileReading / totalDays) : 0,
+  };
 }
 
 /** Pages logged in each month of the year so far, gaps filled with 0. */

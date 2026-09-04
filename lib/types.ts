@@ -120,4 +120,18 @@ export interface InsightsSummary {
   year: number;
   booksOnShelf: number;
   pagesByMonth: { month: string; label: string; pages: number }[];
+  /**
+   * Facts drawn from the reader's own record rather than catalogue metadata.
+   * Null members simply have nothing to report yet.
+   */
+  record: {
+    /** Authors read more than once, most first. */
+    topAuthors: { author: string; books: number }[];
+    averagePageCount: number;
+    longestBook: { title: string; pageCount: number } | null;
+    averageDaysToFinish: number;
+    fastestFinish: { title: string; days: number } | null;
+    /** Pages per day spent inside a book, not per calendar day. */
+    pagesPerReadingDay: number;
+  };
 }

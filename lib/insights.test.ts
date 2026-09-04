@@ -3,7 +3,7 @@ import { computeInsights, monthsThisYear, PACE_WINDOW_DAYS } from "./insights";
 import { addToShelf, markFinished, updateProgress } from "./library";
 import { emptyState } from "./storage";
 import { SAMPLE_CATALOG } from "./catalog";
-import { shiftDay, todayKey } from "./dates";
+import { isoFromDay, shiftDay, todayKey } from "./dates";
 import type { LibraryState, ProgressLog } from "./types";
 
 const today = todayKey();
@@ -166,5 +166,94 @@ describe("pace for the year", () => {
 
   it("reports the year it covers", () => {
     expect(computeInsights(emptyState(), "2026-09-04").year).toBe(2026);
+  });
+});
+
+describe("the reading record", () => {
+  const book = (title: string, author: string, pageCount: number) => ({
+    id: title, title, author, pageCount, genre: "Fiction",
+  });
+  const finished = (
+    title: string, author: string, pages: number, started: string, ended: string
+  ) => ({
+    id: title,
+    book: book(title, author, pages),
+    status: "finished" as const,
+    currentPage: pages,
+    addedAt: isoFromDay(started),
+    startedAt: isoFromDay(started),
+    finishedAt: isoFromDay(ended),
+    updatedAt: isoFromDay(ended),
+  });
+
+  const shelf = (entries: LibraryState["entries"]): LibraryState => ({
+    ...emptyState(), entries,
+  });
+
+  const sample = shelf([
+    finished("Nero", "Conn Iggulden", 331, "2026-07-13", "2026-07-17"),
+    finished("Tyrant", "Conn Iggulden", 447, "2026-07-24", "2026-08-04"),
+    finished("Clear", "Carys Davies", 224, "2026-03-25", "2026-03-26"),
+  ]);
+
+  it("names an author read more than once", () => {
+    const { record } = computeInsights(sample, "2026-09-04");
+    expect(record.topAuthors).toEqual([{ author: "Conn Iggulden", books: 2 }]);
+  });
+
+  it("says nothing about an author read only once", () => {
+    const once = shelf([finished("Clear", "Carys Davies", 224, "2026-03-25", "2026-03-26")]);
+    expect(computeInsights(once, "2026-09-04").record.topAuthors).toEqual([]);
+  });
+
+  it("finds the longest book", () => {
+    const { record } = computeInsights(sample, "2026-09-04");
+    expect(record.longestBook).toEqual({ title: "Tyrant", pageCount: 447 });
+  });
+
+  it("finds the fastest finish", () => {
+    const { record } = computeInsights(sample, "2026-09-04");
+    expect(record.fastestFinish).toEqual({ title: "Clear", days: 1 });
+  });
+
+  it("averages page count and days", () => {
+    const { record } = computeInsights(sample, "2026-09-04");
+    expect(record.averagePageCount).toBe(Math.round((331 + 447 + 224) / 3));
+    // 4 + 11 + 1 days over three books.
+    expect(record.averageDaysToFinish).toBe(Math.round((4 + 11 + 1) / 3));
+  });
+
+  it("counts pages against days inside a book, not calendar days", () => {
+    // 1002 pages across 16 reading days — far above the year-to-date pace,
+    // and that gap is the point of showing both.
+    const { record } = computeInsights(sample, "2026-09-04");
+    expect(record.pagesPerReadingDay).toBe(Math.round((331 + 447 + 224) / (4 + 11 + 1)));
+  });
+
+  it("counts a book started and finished the same day as one day", () => {
+    const sameDay = shelf([finished("Clear", "C D", 224, "2026-03-25", "2026-03-25")]);
+    expect(computeInsights(sameDay, "2026-09-04").record.fastestFinish?.days).toBe(1);
+  });
+
+  it("ignores unfinished books and books with no dates", () => {
+    const mixed: LibraryState = shelf([
+      finished("Nero", "Conn Iggulden", 331, "2026-07-13", "2026-07-17"),
+      { ...finished("X", "Y", 900, "2026-01-01", "2026-01-02"), status: "reading" },
+      { ...finished("Z", "W", 800, "2026-01-01", "2026-01-02"), startedAt: undefined },
+    ]);
+    const { record } = computeInsights(mixed, "2026-09-04");
+    // The 900-page book is unfinished; the 800-page one counts for length
+    // but cannot contribute a duration.
+    expect(record.longestBook?.pageCount).toBe(800);
+    expect(record.fastestFinish?.title).toBe("Nero");
+  });
+
+  it("reports nothing on an empty shelf", () => {
+    const { record } = computeInsights(emptyState(), "2026-09-04");
+    expect(record.topAuthors).toEqual([]);
+    expect(record.longestBook).toBeNull();
+    expect(record.fastestFinish).toBeNull();
+    expect(record.averagePageCount).toBe(0);
+    expect(record.pagesPerReadingDay).toBe(0);
   });
 });
