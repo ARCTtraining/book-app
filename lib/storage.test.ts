@@ -14,6 +14,7 @@ function entry(id: string): ShelfEntry {
     status: "want",
     currentPage: 0,
     addedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 

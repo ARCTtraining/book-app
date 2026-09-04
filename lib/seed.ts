@@ -126,6 +126,7 @@ export function buildSampleLibrary(today: DayKey = todayKey()): LibraryState {
       addedAt: iso(shiftDay(today, -spec.startedDaysAgo - 2)),
       startedAt: iso(shiftDay(today, -spec.startedDaysAgo)),
       finishedAt: iso(shiftDay(today, -spec.finishedDaysAgo)),
+      updatedAt: iso(shiftDay(today, -spec.finishedDaysAgo)),
     };
     entries.push(entry);
 
@@ -154,6 +155,7 @@ export function buildSampleLibrary(today: DayKey = todayKey()): LibraryState {
       currentPage: spec.currentPage,
       addedAt: iso(shiftDay(today, -spec.startedDaysAgo - 1)),
       startedAt: iso(shiftDay(today, -spec.startedDaysAgo)),
+      updatedAt: iso(today),
     };
     entries.push(entry);
 
@@ -180,6 +182,7 @@ export function buildSampleLibrary(today: DayKey = todayKey()): LibraryState {
       status: "want",
       currentPage: 0,
       addedAt: iso(shiftDay(today, -Math.round(rand() * 20))),
+      updatedAt: iso(today),
     });
   }
 
@@ -187,6 +190,7 @@ export function buildSampleLibrary(today: DayKey = todayKey()): LibraryState {
     version: STATE_VERSION,
     entries,
     logs: logs.sort((a, b) => a.day.localeCompare(b.day)),
+    tombstones: [],
     settings: { ...DEFAULT_SETTINGS },
   };
 }

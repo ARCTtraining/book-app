@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useLibrary } from "./LibraryProvider";
+import {
+  readPassphrase,
+  writePassphrase,
+  type SyncOutcome,
+} from "@/lib/sync";
 import { Button, PageTitle, SectionHeading, cx } from "./ui";
 
 export function SettingsScreen() {
@@ -69,6 +74,8 @@ export function SettingsScreen() {
           </div>
         </section>
 
+        <SyncSection />
+
         <section>
           <SectionHeading>Data</SectionHeading>
           <div className="space-y-2.5">
@@ -113,6 +120,87 @@ export function SettingsScreen() {
         </section>
       </div>
     </>
+  );
+}
+
+/** The stored passphrase only changes here, so nothing to subscribe to. */
+const NEVER_CHANGES = () => () => {};
+
+/**
+ * Shelf sync.
+ *
+ * The passphrase is held per device rather than in the shelf itself, so it
+ * is never uploaded and never travels between devices. Sync is always
+ * manual: this is a prototype, and a background sync that quietly rewrites
+ * your shelf is not something to ship untested.
+ */
+function SyncSection() {
+  const { sync, syncing, lastSyncedAt, state } = useLibrary();
+  const [result, setResult] = useState<SyncOutcome | null>(null);
+
+  // The saved passphrase is read through an external store rather than an
+  // effect: localStorage does not exist during the server render, and
+  // useSyncExternalStore hydrates the difference without a mismatch. A draft
+  // takes over once the field is edited.
+  const saved = useSyncExternalStore(NEVER_CHANGES, readPassphrase, () => "");
+  const [draft, setDraft] = useState<string | null>(null);
+  const passphrase = draft ?? saved;
+
+  const run = async () => {
+    writePassphrase(passphrase);
+    setResult(await sync(passphrase));
+  };
+
+  return (
+    <section>
+      <SectionHeading>Sync</SectionHeading>
+      <div className="space-y-2.5">
+        <p className="text-[13px] leading-relaxed text-charcoal/70">
+          Sends your shelf to MotherDuck and brings back anything added on
+          another device. Your books stay on this device either way — sync
+          adds a backup, it does not replace local storage.
+        </p>
+
+        <label className="block">
+          <span className="label-caps block text-charcoal/55">Passphrase</span>
+          <input
+            type="password"
+            value={passphrase}
+            onChange={(e) => setDraft(e.target.value)}
+            autoComplete="off"
+            placeholder="Set on the server"
+            className="mt-1 w-full rounded-card border border-rule bg-paper px-2.5 py-2 text-[14px] text-ink placeholder:text-charcoal/35 focus:border-ink focus:outline-none"
+          />
+        </label>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" disabled={syncing || !passphrase} onClick={run}>
+            {syncing ? "Syncing…" : "Sync now"}
+          </Button>
+          <span className="tnum text-[12px] text-charcoal/55">
+            {lastSyncedAt
+              ? `Last synced ${new Date(lastSyncedAt).toLocaleString()}`
+              : "Never synced"}
+          </span>
+        </div>
+
+        {result && (
+          <p
+            role="status"
+            className={cx(
+              "rounded-card border px-3 py-2 text-[12px] leading-relaxed",
+              result.ok
+                ? "border-teal/50 bg-paper-dark text-charcoal/80"
+                : "border-marigold/60 bg-paper-dark text-charcoal/80"
+            )}
+          >
+            {result.ok
+              ? `Synced. ${state.entries.length} ${state.entries.length === 1 ? "book" : "books"} on the shelf.`
+              : result.message}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

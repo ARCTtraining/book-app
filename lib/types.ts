@@ -46,6 +46,22 @@ export interface ShelfEntry {
   addedAt: string;
   startedAt?: string;
   finishedAt?: string;
+  /**
+   * When this entry last changed. Sync merges per entry on this, so a device
+   * that has been offline cannot clobber newer edits made elsewhere.
+   */
+  updatedAt: string;
+}
+
+/**
+ * A deleted entry, remembered so the deletion can propagate.
+ *
+ * Without tombstones a book removed on one device is simply absent from that
+ * device's next sync, and the other device's copy puts it straight back.
+ */
+export interface Tombstone {
+  id: string;
+  deletedAt: string;
 }
 
 /**
@@ -69,6 +85,8 @@ export interface LibraryState {
   version: number;
   entries: ShelfEntry[];
   logs: ProgressLog[];
+  /** Removed entry ids, kept so sync can propagate the removal. */
+  tombstones: Tombstone[];
   /** Prototype-only UI preferences (the placeholder Reminders section). */
   settings: Settings;
 }

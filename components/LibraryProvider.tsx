@@ -23,6 +23,12 @@ import { computeInsights } from "@/lib/insights";
 import { computeStreak } from "@/lib/streaks";
 import { buildSampleLibrary } from "@/lib/seed";
 import {
+  readLastSynced,
+  syncLibrary,
+  writeLastSynced,
+  type SyncOutcome,
+} from "@/lib/sync";
+import {
   emptyState,
   localStorageRepository,
   type LibraryRepository,
@@ -60,6 +66,10 @@ interface LibraryContextValue {
   loadSampleData: () => void;
   clearAll: () => void;
   shelfStatusOf: (bookId: string) => ShelfStatus | null;
+  /** Pushes the shelf to MotherDuck and adopts the merged result. */
+  sync: (passphrase: string) => Promise<SyncOutcome>;
+  syncing: boolean;
+  lastSyncedAt: string | null;
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
@@ -159,6 +169,40 @@ export function LibraryProvider({
     }));
   }, []);
 
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
+    readLastSynced()
+  );
+
+  // Mirrors state for the async sync, which must upload whatever is current
+  // when it runs rather than whatever was captured when `sync` was created.
+  // Written in an effect rather than during render, which React forbids.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const sync = useCallback<LibraryContextValue["sync"]>(
+    async (passphrase) => {
+      setSyncing(true);
+      try {
+        const outcome = await syncLibrary(stateRef.current, passphrase);
+
+        if (outcome.ok) {
+          // Merge in, rather than replace: settings are per-device and do
+          // not travel, and edits made mid-flight must not be dropped.
+          setState((latest) => ({ ...latest, ...outcome.merged }));
+          writeLastSynced(outcome.syncedAt);
+          setLastSyncedAt(outcome.syncedAt);
+        }
+        return outcome;
+      } finally {
+        setSyncing(false);
+      }
+    },
+    []
+  );
+
   const shelfStatusOf = useCallback(
     (bookId: string) => library.findEntryByBook(state, bookId)?.status ?? null,
     [state]
@@ -183,6 +227,9 @@ export function LibraryProvider({
       loadSampleData,
       clearAll,
       shelfStatusOf,
+      sync,
+      syncing,
+      lastSyncedAt,
     }),
     [
       state,
@@ -202,6 +249,9 @@ export function LibraryProvider({
       loadSampleData,
       clearAll,
       shelfStatusOf,
+      sync,
+      syncing,
+      lastSyncedAt,
     ]
   );
 

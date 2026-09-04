@@ -14,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 129 unit tests over lib/ (vitest)
+npm test             # 139 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -147,12 +147,53 @@ and every rule there is pure and unit-tested:
 | Category free text | `genre` is `string`, not an enum; `spineColor()` hashes unknown ones to a stable colour. A few aliases map common Google categories onto the app's own genres. |
 | Descriptions | Several hundred words, with HTML, entities and mojibake. Cleaned and trimmed to ~180 characters. |
 
-### Still to swap: the database
+## Sync to MotherDuck
 
-Implement `LibraryRepository` — `load`, `save`, `clear` — against your API and
-pass it to `<LibraryProvider repository={…}>`. Shelf entries denormalize a
-snapshot of the book rather than referencing the catalogue, so they survive
-both swaps and stay readable offline.
+localStorage stays the source of truth. Sync is an addition on top: it pushes
+the shelf to MotherDuck, merges it with what is already there, and brings back
+anything added on another device. With sync unconfigured or unreachable the
+app behaves exactly as it did before, offline included.
+
+```bash
+MOTHERDUCK_TOKEN=...            # service token; full access, treat as a password
+MOTHERDUCK_HOST=pg.us-east-1-aws.motherduck.com   # region-scoped
+MOTHERDUCK_DATABASE=book_app
+SYNC_PASSPHRASE=...             # guards /api/sync on a public deployment
+```
+
+Enter the same passphrase once per device under **Settings → Sync**. It is
+kept per device and never travels with the shelf.
+
+Connection is over MotherDuck's Postgres wire endpoint using `pg`, so no
+native DuckDB binaries end up in the function. The SQL dialect on the far side
+is still DuckDB.
+
+### How two devices are reconciled
+
+All of it is pure and unit-tested in [`lib/merge.ts`](lib/merge.ts):
+
+- **Entries** merge per book on `updatedAt`; the newer edit wins. Every
+  mutation stamps it through a single choke point so it cannot be forgotten.
+- **Deletions** leave a tombstone. Without one, a book removed on the phone is
+  merely absent from its next upload and the laptop's copy puts it straight
+  back. A tombstone loses to an edit that came after it, so deleting a book
+  you then kept reading does not discard the reading.
+- **Logs** merge per (entry, day) taking the larger `pagesRead`, matching how
+  the app folds a day's updates into one record — two devices reading the same
+  day are reconciled to the further progress, not the sum.
+
+Merging is symmetric and idempotent: syncing twice changes nothing, and which
+device syncs first does not affect the result.
+
+Schema lives in the `book_app` database — `books`, `shelf_entries`,
+`progress_logs`, `deleted_entries`, `settings`, plus `shelf`,
+`pages_by_month` and `reading_days` views for querying.
+
+### Still to swap: local-first persistence
+
+`LibraryRepository` — `load`, `save`, `clear` — is still localStorage. Sync
+sits above it rather than replacing it, which is what keeps the app working
+offline.
 
 ## PWA
 

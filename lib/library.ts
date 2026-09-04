@@ -56,6 +56,7 @@ export function addToShelf(
     currentPage: 0,
     addedAt: now,
     startedAt: status === "reading" ? now : undefined,
+    updatedAt: now,
   };
   return { ...state, entries: [entry, ...state.entries] };
 }
@@ -214,6 +215,7 @@ export function addFinishedBook(
     addedAt: existing?.addedAt ?? new Date().toISOString(),
     startedAt: dates.startedAt ? isoFromDay(dates.startedAt) : undefined,
     finishedAt: isoFromDay(dates.finishedAt),
+    updatedAt: new Date().toISOString(),
   };
 
   const log: ProgressLog = {
@@ -235,11 +237,24 @@ export function addFinishedBook(
   };
 }
 
+/**
+ * Takes a book off the shelf, along with its logs.
+ *
+ * Records a tombstone so the removal survives a sync: without one, the book
+ * is merely absent from this device's next upload, and another device's copy
+ * puts it straight back.
+ */
 export function removeEntry(state: LibraryState, entryId: string): LibraryState {
+  if (!state.entries.some((entry) => entry.id === entryId)) return state;
+
   return {
     ...state,
     entries: state.entries.filter((entry) => entry.id !== entryId),
     logs: state.logs.filter((log) => log.entryId !== entryId),
+    tombstones: [
+      ...state.tombstones.filter((t) => t.id !== entryId),
+      { id: entryId, deletedAt: new Date().toISOString() },
+    ],
   };
 }
 
@@ -252,15 +267,22 @@ export function updateSettings(
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Applies a change to one entry and stamps it.
+ *
+ * The single choke point for entry edits, so `updatedAt` cannot be forgotten
+ * — sync merges on it, and a stale stamp silently loses the change.
+ */
 function mapEntry(
   state: LibraryState,
   entryId: string,
   fn: (entry: ShelfEntry) => ShelfEntry
 ): LibraryState {
+  const now = new Date().toISOString();
   return {
     ...state,
     entries: state.entries.map((entry) =>
-      entry.id === entryId ? fn(entry) : entry
+      entry.id === entryId ? { ...fn(entry), updatedAt: now } : entry
     ),
   };
 }

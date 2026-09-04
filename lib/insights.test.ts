@@ -114,6 +114,7 @@ function entry(id: string, genre: string) {
     status: "want" as const,
     currentPage: 0,
     addedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 

@@ -46,6 +46,7 @@ export function emptyState(): LibraryState {
     version: STATE_VERSION,
     entries: [],
     logs: [],
+    tombstones: [],
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -70,8 +71,15 @@ function migrate(raw: unknown): LibraryState | null {
   }
   return {
     version: STATE_VERSION,
-    entries: candidate.entries,
+    // Shelves saved before sync existed carry no change stamp. Backdating
+    // them to when the book was added means a genuine edit on any device
+    // always wins over an unstamped copy.
+    entries: candidate.entries.map((entry) => ({
+      ...entry,
+      updatedAt: entry.updatedAt ?? entry.addedAt ?? new Date(0).toISOString(),
+    })),
     logs: candidate.logs,
+    tombstones: Array.isArray(candidate.tombstones) ? candidate.tombstones : [],
     settings: { ...DEFAULT_SETTINGS, ...(candidate.settings ?? {}) },
   };
 }
