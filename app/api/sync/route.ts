@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { mergeLibraries, type Mergeable } from "@/lib/merge";
+import { repairBackfillLogs } from "@/lib/library";
 import { motherduckConfigured, readLibrary, writeLibrary } from "@/lib/motherduck";
 
 /**
@@ -64,8 +65,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Repair the upload before merging. A device still running older code
+    // sends backfill logs dated when the book was entered rather than when
+    // it was finished; unrepaired, those union with the corrected rows and
+    // the pages count twice.
     const theirs = await readLibrary();
-    const merged = mergeLibraries(mine, theirs);
+    const merged = mergeLibraries(repairBackfillLogs(mine), theirs);
     await writeLibrary(merged);
 
     return NextResponse.json({

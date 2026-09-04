@@ -16,6 +16,9 @@ import { dayOf, isoFromDay, todayKey, type DayKey } from "./dates";
  * happen without touching behaviour.
  */
 
+/** The shelf-shaped subset the repair needs, so it works on a sync payload. */
+type ShelfShaped = { entries: ShelfEntry[]; logs: ProgressLog[] };
+
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -201,11 +204,11 @@ export function setEntryDates(
  * book — the signature `addFinishedBook` leaves. A book read through the app
  * has a real day-by-day record, and that is never redistributed.
  */
-function moveBackfillLog(
-  state: LibraryState,
+function moveBackfillLog<T extends ShelfShaped>(
+  state: T,
   entryId: string,
   finishedOn: DayKey | undefined
-): LibraryState {
+): T {
   if (!finishedOn) return state;
 
   const entry = state.entries.find((e) => e.id === entryId);
@@ -233,7 +236,7 @@ function moveBackfillLog(
  * of books read across the year drew every page into one month. Runs on
  * load; a book whose log already matches is left untouched.
  */
-export function repairBackfillLogs(state: LibraryState): LibraryState {
+export function repairBackfillLogs<T extends ShelfShaped>(state: T): T {
   let next = state;
   for (const entry of state.entries) {
     if (entry.status !== "finished") continue;
