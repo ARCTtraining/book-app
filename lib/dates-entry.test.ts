@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addFinishedBook, setEntryDates, validateEntryDates } from "./library";
-import { addToShelf } from "./library";
+import {
+  addFinishedBook,
+  addToShelf,
+  repairBackfillLogs,
+  setEntryDates,
+  updateProgress,
+  validateEntryDates,
+} from "./library";
 import { emptyState } from "./storage";
 import { SAMPLE_CATALOG } from "./catalog";
 import { dayKey, dayOf, isoFromDay, shiftDay, todayKey } from "./dates";
@@ -167,5 +173,80 @@ describe("addFinishedBook", () => {
   it("does not award a streak for a book finished long ago", () => {
     const state = addFinishedBook(emptyState(), piranesi, { finishedAt: lastYear });
     expect(computeStreak(state.logs, today).current).toBe(0);
+  });
+});
+
+describe("the backfill log follows the finish date", () => {
+  const march = shiftDay(today, -180);
+  const june = shiftDay(today, -90);
+
+  it("moves the log when the finish date is corrected", () => {
+    // The bug: a shelf of books read across the year drew every page into
+    // the month they happened to be entered.
+    let state = addFinishedBook(emptyState(), piranesi, { finishedAt: today });
+    expect(state.logs[0].day).toBe(today);
+
+    state = setEntryDates(state, state.entries[0].id, { finishedAt: march });
+
+    expect(state.logs).toHaveLength(1);
+    expect(state.logs[0].day).toBe(march);
+    expect(state.logs[0].pagesRead).toBe(piranesi.pageCount);
+  });
+
+  it("puts the pages in the right month on the chart", () => {
+    let state = addFinishedBook(emptyState(), piranesi, { finishedAt: today });
+    state = setEntryDates(state, state.entries[0].id, { finishedAt: june });
+
+    const insights = computeInsights(state, today);
+    const month = insights.pagesByMonth.find((m) => m.month === june.slice(0, 7));
+    expect(month?.pages).toBe(piranesi.pageCount);
+    // And nothing left behind in the month it was entered.
+    const entered = insights.pagesByMonth.find((m) => m.month === today.slice(0, 7));
+    expect(entered?.pages).toBe(0);
+  });
+
+  it("leaves a genuine day-by-day record alone", () => {
+    // A book actually read through the app has real sessions; correcting its
+    // finish date must not redistribute them.
+    let state = addToShelf(emptyState(), piranesi, "reading");
+    const id = state.entries[0].id;
+    state = { ...state, logs: [
+      { id: "a", entryId: id, day: shiftDay(today, -3), pagesRead: 100, page: 100, at: "x" },
+      { id: "b", entryId: id, day: shiftDay(today, -1), pagesRead: 145, page: 245, at: "x" },
+    ] };
+
+    const after = setEntryDates(state, id, { finishedAt: march });
+    expect(after.logs.map((l) => l.day)).toEqual([
+      shiftDay(today, -3),
+      shiftDay(today, -1),
+    ]);
+  });
+
+  it("leaves a single log alone when it is not the whole book", () => {
+    let state = addToShelf(emptyState(), piranesi, "reading");
+    const id = state.entries[0].id;
+    state = { ...state, logs: [
+      { id: "a", entryId: id, day: today, pagesRead: 30, page: 30, at: "x" },
+    ] };
+    expect(setEntryDates(state, id, { finishedAt: march }).logs[0].day).toBe(today);
+  });
+
+  it("repairs a shelf saved before the fix", () => {
+    let state = addFinishedBook(emptyState(), piranesi, { finishedAt: today });
+    // Simulate the old behaviour: dates edited, log left behind.
+    state = {
+      ...state,
+      entries: state.entries.map((e) => ({ ...e, finishedAt: isoFromDay(march) })),
+    };
+    expect(state.logs[0].day).toBe(today);
+
+    const repaired = repairBackfillLogs(state);
+    expect(repaired.logs[0].day).toBe(march);
+  });
+
+  it("leaves an unfinished book out of the repair", () => {
+    let state = addToShelf(emptyState(), piranesi, "reading");
+    state = updateProgress(state, state.entries[0].id, piranesi.pageCount - 1);
+    expect(repairBackfillLogs(state)).toBe(state);
   });
 });

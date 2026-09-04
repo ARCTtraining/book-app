@@ -1,4 +1,5 @@
 import type { LibraryState, Settings } from "./types";
+import { repairBackfillLogs } from "./library";
 
 /**
  * Persistence layer.
@@ -84,6 +85,14 @@ function migrate(raw: unknown): LibraryState | null {
   };
 }
 
+/** Corrections applied to whatever comes out of storage. */
+function repair(state: LibraryState): LibraryState {
+  // Backfilled books used to keep their log on the day they were entered
+  // rather than the day they were finished, which drew a year of reading
+  // into a single month on the chart.
+  return repairBackfillLogs(state);
+}
+
 export const localStorageRepository: LibraryRepository = {
   async load() {
     // Guard for the server render pass and for Safari private mode, where
@@ -103,7 +112,7 @@ export const localStorageRepository: LibraryRepository = {
       if (!alreadyRun && isSeededDemoShelf(state)) {
         return { ...state, entries: [], logs: [] };
       }
-      return state;
+      return repair(state);
     } catch {
       return null;
     }

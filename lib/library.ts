@@ -182,11 +182,65 @@ export function setEntryDates(
 
   if (validateEntryDates(nextStarted, nextFinished)) return state;
 
-  return mapEntry(state, entryId, (e) => ({
+  const moved = mapEntry(state, entryId, (e) => ({
     ...e,
     startedAt: nextStarted ? isoFromDay(nextStarted) : undefined,
     finishedAt: nextFinished ? isoFromDay(nextFinished) : undefined,
   }));
+
+  // A backfilled book carries a single log standing for the whole read. It
+  // has to travel with the finish date, or the pages stay in the month the
+  // book was entered and the chart contradicts the shelf.
+  return moveBackfillLog(moved, entryId, nextFinished);
+}
+
+/**
+ * Re-dates the lone log of a backfilled book.
+ *
+ * Only touches an entry whose entire reading is one log covering the whole
+ * book — the signature `addFinishedBook` leaves. A book read through the app
+ * has a real day-by-day record, and that is never redistributed.
+ */
+function moveBackfillLog(
+  state: LibraryState,
+  entryId: string,
+  finishedOn: DayKey | undefined
+): LibraryState {
+  if (!finishedOn) return state;
+
+  const entry = state.entries.find((e) => e.id === entryId);
+  if (!entry) return state;
+
+  const logs = state.logs.filter((log) => log.entryId === entryId);
+  if (logs.length !== 1) return state;
+  if (logs[0].pagesRead !== entry.book.pageCount) return state;
+  if (logs[0].day === finishedOn) return state;
+
+  return {
+    ...state,
+    logs: state.logs.map((log) =>
+      log.entryId === entryId
+        ? { ...log, day: finishedOn, at: isoFromDay(finishedOn) }
+        : log
+    ),
+  };
+}
+
+/**
+ * Repairs shelves saved before the log followed the finish date.
+ *
+ * Backfilled books kept their log on the day they were entered, so a shelf
+ * of books read across the year drew every page into one month. Runs on
+ * load; a book whose log already matches is left untouched.
+ */
+export function repairBackfillLogs(state: LibraryState): LibraryState {
+  let next = state;
+  for (const entry of state.entries) {
+    if (entry.status !== "finished") continue;
+    const finishedOn = dayOf(entry.finishedAt);
+    if (finishedOn) next = moveBackfillLog(next, entry.id, finishedOn);
+  }
+  return next;
 }
 
 /**
