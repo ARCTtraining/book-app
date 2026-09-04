@@ -220,18 +220,36 @@ for (const url of ["/", "/search", "/insights", "/settings", "/manifest.json"]) 
 }
 
 console.log("\npersistence");
-const seeded = await poll(`(() => {
+// A new reader starts with an empty shelf: the sample library is opt-in from
+// Settings, never seeded on their behalf.
+const fresh = await poll(`(() => {
+  const heading = document.querySelector('main h1');
   const s = JSON.parse(localStorage.getItem('reading-log/library') || 'null');
-  return { done: !!s, entries: s ? s.entries.length : 0 };
+  return {
+    done: !!heading,
+    entries: s ? s.entries.length : 0,
+    books: document.querySelectorAll('main h3').length,
+    invites: !!document.body.textContent.match(/Start a streak|Nothing open right now/)
+  };
 })()`);
-check("seeds the sample shelf on a first run", seeded.entries > 0, seeded);
+check("a first run starts with an empty shelf", fresh.entries === 0, fresh);
+check("the empty shelf invites a first book", fresh.invites, fresh);
 
+// Write a shelf of our own, then confirm a reload restores exactly it.
 await evaluate(`
   (() => {
-    const s = JSON.parse(localStorage.getItem('reading-log/library'));
-    s.entries = s.entries.slice(0, 2);
-    s.entries[0].currentPage = 123;
-    localStorage.setItem('reading-log/library', JSON.stringify(s));
+    const now = new Date().toISOString();
+    localStorage.setItem('reading-log/library', JSON.stringify({
+      version: 1,
+      entries: [{
+        id: 'e1',
+        book: { id: 'b1', title: 'A Tracked Book', author: 'A N Author',
+                pageCount: 300, genre: 'Fiction' },
+        status: 'reading', currentPage: 123, addedAt: now, startedAt: now
+      }],
+      logs: [],
+      settings: {}
+    }));
     return true;
   })()
 `);
@@ -246,9 +264,9 @@ const survived = await poll(`(() => {
     titles
   };
 })()`);
-check("keeps an edited shelf across a reload", survived.count === 2, survived);
+check("keeps a saved shelf across a reload", survived.count === 1, survived);
 check("keeps the reading position", survived.page === 123, survived);
-check("renders the stored shelf, never the sample over it", survived.titles.length <= 4, survived.titles);
+check("renders the stored book, never a sample over it", survived.titles.includes("A Tracked Book"), survived.titles);
 
 console.log("\noffline");
 const OFFLINE = { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 };

@@ -73,11 +73,12 @@ export function SettingsScreen() {
           <SectionHeading>Data</SectionHeading>
           <div className="space-y-2.5">
             <p className="text-[13px] leading-relaxed text-charcoal/70">
-              Your shelf lives in this browser&rsquo;s local storage. Clearing it
-              is the quickest way to review the empty states.
+              Your shelf lives in this browser&rsquo;s local storage and starts
+              empty. Loading the sample shelf replaces it with a demo library,
+              which is the quickest way to see the charts with data in them.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={loadSampleData}>Reload sample shelf</Button>
+              <Button onClick={loadSampleData}>Load sample shelf</Button>
               {confirmingClear ? (
                 <>
                   <Button
@@ -106,7 +107,7 @@ export function SettingsScreen() {
           <SectionHeading>About</SectionHeading>
           <dl className="divide-y divide-rule rounded-card border border-rule bg-paper text-[13px]">
             <AboutRow term="Version" detail="0.1 — UI prototype" />
-            <AboutRow term="Catalogue" detail="12 sample books (Google Books to follow)" />
+            <AboutRow term="Catalogue" detail="Google Books (sample offline)" />
             <AboutRow term="Storage" detail="This device only" />
           </dl>
         </section>

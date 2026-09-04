@@ -148,16 +148,17 @@ export function cleanBlurb(raw?: string): string | undefined {
 }
 
 /**
- * Maps one volume, or returns null if it cannot be tracked.
+ * Maps one volume, or returns null if it is not a book at all.
  *
- * A book with no page count has no progress bar, no slider and no percentage
- * — every progress feature in the app is defined against it — so those are
- * dropped rather than allowed onto the shelf in a broken state.
+ * `pageCount` may come back as 0 here. The search endpoint carries thinner
+ * metadata than the per-volume endpoint — David Keenan's "Boyhood" reports 0
+ * pages in a search and 342 when fetched by id — so a missing count is not
+ * yet grounds to discard the book. `hydratePageCounts` fills the gaps and
+ * `isTrackable` makes the final call.
  */
 export function mapVolume(volume: GoogleVolume): CatalogBook | null {
   const info = volume.volumeInfo;
   if (!volume.id || !info?.title) return null;
-  if (!info.pageCount || info.pageCount <= 0) return null;
 
   const year = Number((info.publishedDate ?? "").slice(0, 4));
 
@@ -166,7 +167,7 @@ export function mapVolume(volume: GoogleVolume): CatalogBook | null {
     isbn13: isbn13Of(volume),
     title: info.title.trim(),
     author: info.authors?.[0]?.trim() || "Unknown author",
-    pageCount: info.pageCount,
+    pageCount: info.pageCount && info.pageCount > 0 ? info.pageCount : 0,
     genre: normalizeGenre(info.categories),
     year: Number.isFinite(year) && year > 0 ? year : undefined,
     blurb: cleanBlurb(info.description),
@@ -193,12 +194,20 @@ function editionKey(book: CatalogBook): string {
 /** How complete a record is, used to pick between editions of one work. */
 function completeness(book: CatalogBook): number {
   return (
+    // Weighted highest: an edition that already states its length needs no
+    // extra request, and is the only kind that can actually be tracked.
+    (book.pageCount > 0 ? 4 : 0) +
     (book.genre !== "Unfiled" ? 2 : 0) +
     (book.thumbnailUrl ? 2 : 0) +
     (book.blurb ? 1 : 0) +
     (book.isbn13 ? 1 : 0) +
     (book.year ? 1 : 0)
   );
+}
+
+/** Only a book with a known length can drive the progress UI. */
+export function isTrackable(book: CatalogBook): boolean {
+  return book.pageCount > 0;
 }
 
 function isJunk(book: CatalogBook): boolean {
@@ -236,12 +245,80 @@ export function demoteJunk(books: CatalogBook[]): CatalogBook[] {
   return [...real, ...junk];
 }
 
-/** The full pipeline from raw response to shelf-ready results. */
+/**
+ * The pure half of the pipeline: map, collapse editions, rank.
+ *
+ * Results may still carry `pageCount: 0` — those are candidates for
+ * hydration, not yet rejects.
+ */
 export function toCatalogBooks(volumes: GoogleVolume[]): CatalogBook[] {
   const mapped = volumes
     .map(mapVolume)
     .filter((b): b is CatalogBook => b !== null);
   return demoteJunk(dedupeEditions(mapped));
+}
+
+/**
+ * How many volumes a single search may look up individually.
+ *
+ * Each one is a separate request against a small daily quota, so this is
+ * deliberately tight. Junk is never hydrated — no quota is spent confirming
+ * the length of a study guide — and responses are cached for an hour, so a
+ * repeated search costs nothing.
+ */
+export const HYDRATE_LIMIT = 8;
+
+/** Fetches one volume's full record, or null if it cannot be read. */
+async function fetchVolume(
+  id: string,
+  apiKey: string,
+  fetchImpl: typeof fetch
+): Promise<GoogleVolume | null> {
+  try {
+    const url = new URL(`${GOOGLE_BOOKS_ENDPOINT}/${encodeURIComponent(id)}`);
+    url.searchParams.set("key", apiKey);
+    const response = await fetchImpl(url.toString(), {
+      next: { revalidate: 86_400 },
+    } as RequestInit);
+    return response.ok ? ((await response.json()) as GoogleVolume) : null;
+  } catch {
+    // One book failing to hydrate must not fail the whole search.
+    return null;
+  }
+}
+
+/**
+ * Fills in page counts the search endpoint omitted.
+ *
+ * Without this the app silently hides real books — the bug that surfaced it
+ * was a reader finding a title on books.google.com that never appeared in
+ * search. Bounded by `HYDRATE_LIMIT` and run in parallel.
+ */
+export async function hydratePageCounts(
+  books: CatalogBook[],
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+  limit = HYDRATE_LIMIT
+): Promise<CatalogBook[]> {
+  const wanted = books
+    .filter((book) => !isTrackable(book))
+    .slice(0, limit)
+    .map((book) => book.id);
+
+  if (wanted.length === 0) return books;
+
+  const found = new Map<string, number>();
+  await Promise.all(
+    wanted.map(async (id) => {
+      const volume = await fetchVolume(id, apiKey, fetchImpl);
+      const pages = volume?.volumeInfo?.pageCount;
+      if (pages && pages > 0) found.set(id, pages);
+    })
+  );
+
+  return books.map((book) =>
+    found.has(book.id) ? { ...book, pageCount: found.get(book.id)! } : book
+  );
 }
 
 export class GoogleBooksError extends Error {
@@ -287,5 +364,11 @@ export async function searchGoogleBooks(
   }
 
   const body = (await response.json()) as { items?: GoogleVolume[] };
-  return toCatalogBooks(body.items ?? []);
+
+  const candidates = toCatalogBooks(body.items ?? []);
+  const hydrated = await hydratePageCounts(candidates, apiKey, fetchImpl);
+
+  // Anything still without a length cannot drive the progress UI, so it is
+  // held back rather than shown as an untrackable book.
+  return hydrated.filter(isTrackable);
 }

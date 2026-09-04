@@ -14,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 96 unit tests over lib/ (vitest)
+npm test             # 103 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -91,7 +91,7 @@ scripts/        icon generator
 - [`storage.ts`](lib/storage.ts) — the `LibraryRepository` interface
 - [`library.ts`](lib/library.ts) — pure state transitions (add, start, log, finish)
 - [`streaks.ts`](lib/streaks.ts), [`insights.ts`](lib/insights.ts) — derived figures
-- [`seed.ts`](lib/seed.ts) — the demo shelf, seeded on first run only
+- [`seed.ts`](lib/seed.ts) — the demo shelf, loaded only on request from Settings
 
 [`components/LibraryProvider.tsx`](components/LibraryProvider.tsx) owns state,
 derives the streak and insights from it, and writes through to the repository.
@@ -129,7 +129,7 @@ and every rule there is pure and unit-tested:
 
 | Problem | What happens |
 | --- | --- |
-| No `pageCount` | Dropped. Progress bar, slider and percentage are all defined against it, so the book cannot be tracked. |
+| No `pageCount` | Looked up individually first — the search endpoint under-reports, returning 0 pages for books whose detail record has a real count. Only dropped if still unknown, since the progress bar, slider and percentage are all defined against it. |
 | Duplicate editions | Collapsed on title + author, ignoring subtitles and `(Movie Tie-In)`-style markers; the best-described edition wins. |
 | Summaries and study guides | Ranked below real editions, matched on title, category *and* author — the mills publish as "Book Summary", "Hyper Summary". |
 | Inconsistent category case | Normalized, so one genre cannot draw as two bars in the chart. |
@@ -175,6 +175,6 @@ in place and correct, but the install itself is untested.
 - `userScalable: false` keeps the fixed masthead and tab bar stable in
   standalone mode, at the cost of pinch zoom — drop it from `viewport` in
   [`app/layout.tsx`](app/layout.tsx) if you would rather keep zoom
-- The sample shelf is seeded on first run; Settings → Data resets or clears it
-- Books with no page count are hidden from search — about a fifth of real
-  Google Books results, including some legitimate editions
+- The shelf starts empty; Settings → Data can load a demo library or clear everything
+- Books whose page count cannot be established, even after an individual
+  lookup, are hidden from search — they cannot drive any progress feature

@@ -5,6 +5,8 @@ import {
   dedupeEditions,
   demoteJunk,
   GoogleBooksError,
+  hydratePageCounts,
+  isTrackable,
   mapVolume,
   normalizeGenre,
   searchGoogleBooks,
@@ -120,11 +122,15 @@ describe("mapVolume", () => {
     });
   });
 
-  it("drops a book with no page count", () => {
-    // 22% of real results. Every progress feature is defined against it, so
-    // such a book cannot be tracked and must not reach the shelf.
-    expect(mapVolume(volume({ pageCount: undefined }))).toBeNull();
-    expect(mapVolume(volume({ pageCount: 0 }))).toBeNull();
+  it("keeps a book with no page count, marked as untrackable", () => {
+    // The search endpoint under-reports: David Keenan's "Boyhood" comes back
+    // with 0 pages in a search and 342 when fetched by id. Discarding here
+    // would hide real books, so the decision is deferred until after
+    // hydration.
+    expect(mapVolume(volume({ pageCount: undefined }))?.pageCount).toBe(0);
+    expect(mapVolume(volume({ pageCount: 0 }))?.pageCount).toBe(0);
+    expect(isTrackable(mapVolume(volume({ pageCount: 0 }))!)).toBe(false);
+    expect(isTrackable(mapVolume(volume())!)).toBe(true);
   });
 
   it("drops a volume with no title or no id", () => {
@@ -286,20 +292,93 @@ describe("demoteJunk", () => {
 });
 
 describe("toCatalogBooks", () => {
-  it("filters, dedupes and ranks in one pass", () => {
+  it("keeps page-less books as candidates and sinks junk, preserving Google's order otherwise", () => {
     const volumes = [
       volume({ title: "Summary of Piranesi" }, "junk"),
-      volume({ pageCount: undefined }, "untrackable"),
+      volume({ title: "Boyhood", authors: ["David Keenan"], pageCount: 0 }, "pageless"),
       volume({}, "good"),
-      volume({ categories: undefined, imageLinks: undefined }, "dupe"),
     ];
     const books = toCatalogBooks(volumes);
 
-    expect(books.map((b) => b.id)).toEqual(["good", "junk"]);
+    // Google's own relevance ranking is good, so only junk is reordered.
+    expect(books.map((b) => b.id)).toEqual(["pageless", "good", "junk"]);
+  });
+
+  it("prefers the edition that already states its length", () => {
+    // Avoids spending a request to hydrate what a sibling edition knows.
+    const volumes = [
+      volume({ pageCount: 0 }, "pageless"),
+      volume({ pageCount: 245 }, "withPages"),
+    ];
+    expect(toCatalogBooks(volumes)[0].id).toBe("withPages");
   });
 
   it("handles an empty response", () => {
     expect(toCatalogBooks([])).toEqual([]);
+  });
+});
+
+describe("hydratePageCounts", () => {
+  const pageless = (id: string): CatalogBook => ({
+    id,
+    title: `Book ${id}`,
+    author: "A",
+    pageCount: 0,
+    genre: "Fiction",
+  });
+
+  const detail = (pages: number) =>
+    ({ ok: true, status: 200, json: async () => ({ volumeInfo: { pageCount: pages } }) }) as unknown as Response;
+
+  it("fills in a page count the search endpoint omitted", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(detail(342));
+    const [book] = await hydratePageCounts([pageless("Gq5g0QEACAAJ")], "K", fetchImpl);
+
+    expect(book.pageCount).toBe(342);
+    expect(isTrackable(book)).toBe(true);
+  });
+
+  it("looks up only the books that need it", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(detail(100));
+    const complete: CatalogBook = { ...pageless("has"), pageCount: 200 };
+    await hydratePageCounts([complete, pageless("needs")], "K", fetchImpl);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toContain("needs");
+  });
+
+  it("makes no request when nothing is missing", async () => {
+    const fetchImpl = vi.fn();
+    const complete: CatalogBook = { ...pageless("has"), pageCount: 200 };
+    expect(await hydratePageCounts([complete], "K", fetchImpl)).toEqual([complete]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("respects the lookup budget", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(detail(100));
+    const many = Array.from({ length: 20 }, (_, i) => pageless(`b${i}`));
+    await hydratePageCounts(many, "K", fetchImpl, 3);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves a book alone when the lookup fails or still has no count", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) } as unknown as Response)
+      .mockResolvedValueOnce(detail(0));
+
+    const books = await hydratePageCounts([pageless("a"), pageless("b")], "K", fetchImpl);
+    expect(books.every((b) => b.pageCount === 0)).toBe(true);
+  });
+
+  it("survives a network error on one lookup", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(detail(200));
+
+    const books = await hydratePageCounts([pageless("a"), pageless("b")], "K", fetchImpl);
+    expect(books.map((b) => b.pageCount).sort()).toEqual([0, 200]);
   });
 });
 

@@ -62,10 +62,9 @@ export function LibraryProvider({
   children: React.ReactNode;
   repository?: LibraryRepository;
 }) {
-  // Starts empty rather than seeded: localStorage is unreadable during the
-  // server render, so anything else would prerender a shelf the returning
-  // reader does not have and flash it on every launch. The sample shelf is
-  // seeded below, only when storage turns out to be genuinely empty.
+  // Starts empty, and stays empty until the reader adds something. The demo
+  // shelf is no longer seeded automatically — it is opt-in from Settings, so
+  // a new reader's first books are their own.
   const [state, setState] = useState<LibraryState>(emptyState);
   const [ready, setReady] = useState(false);
   const repo = useRef(repository);
@@ -75,7 +74,7 @@ export function LibraryProvider({
     (async () => {
       const stored = await repo.current.load();
       if (cancelled) return;
-      setState(stored ?? buildSampleLibrary());
+      if (stored) setState(stored);
       setReady(true);
     })();
     return () => {
