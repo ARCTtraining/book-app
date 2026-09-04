@@ -1,26 +1,139 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Reading Log design tokens.
+
+   Library index-card aesthetic: flat colour, 1px hairline rules, 4px radii,
+   serif for titles and headings, sans for UI chrome and data. No gradients,
+   no drop shadows.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-ink: #1b2a41;
+  --color-paper: #f1ecdf;
+  --color-paper-dark: #e4dcc5;
+  --color-marigold: #c98a2b;
+  --color-teal: #3f6f6b;
+  --color-charcoal: #2a2620;
+  --color-rule: #c9bfa0;
+
+  --font-serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman",
+    serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+
+  /* Every rounded corner in the app is this one value. */
+  --radius-card: 4px;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Keeps the navy tab bar / header colour bleeding into iOS overscroll
+     instead of exposing white behind the page. */
+  background-color: var(--color-ink);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-paper);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  /* Standalone mode has no browser chrome to rubber-band against. */
+  overscroll-behavior-y: none;
+}
+
+/* Utility layer -------------------------------------------------------- */
+
+@utility hairline-b {
+  border-bottom: 1px solid var(--color-rule);
+}
+
+/* Small uppercase sans label used for section heads, stat captions and
+   table-like keys. */
+@utility label-caps {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* iOS safe areas — needed once installed to the home screen. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Native-feeling touch behaviour in standalone mode. */
+@layer base {
+  button,
+  a,
+  input,
+  [role="tab"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Serif headings, sans data. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+  }
+
+  /* Native range input restyled as a flat marigold page slider. */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    background: transparent;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    background-color: var(--color-paper-dark);
+    border: 1px solid var(--color-rule);
+    border-radius: 0;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-top: -8px;
+    border-radius: 2px;
+    background-color: var(--color-marigold);
+    border: 1px solid var(--color-ink);
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    background-color: var(--color-paper-dark);
+    border: 1px solid var(--color-rule);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 2px;
+    background-color: var(--color-marigold);
+    border: 1px solid var(--color-ink);
+  }
+
+  /* Recharts injects a focus outline on the SVG wrapper. */
+  .recharts-wrapper:focus,
+  .recharts-surface:focus {
+    outline: none;
+  }
 }
