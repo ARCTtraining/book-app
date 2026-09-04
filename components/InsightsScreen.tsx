@@ -2,8 +2,7 @@
 
 import { useLibrary } from "./LibraryProvider";
 import { PagesByMonthChart } from "./charts/PagesByMonthChart";
-import { GenreChart } from "./charts/GenreChart";
-import { EmptyState, LoadingRules, PageTitle } from "./ui";
+import { cx, EmptyState, LoadingRules, PageTitle } from "./ui";
 
 /**
  * Stat tiles first, then the two charts.
@@ -62,21 +61,29 @@ export function InsightsScreen() {
             value={insights.booksFinished}
             note={insights.booksFinished === 1 ? "One down" : "All time"}
           />
+          {/* The two paces sit side by side so recent form reads against the
+              year — the comparison is the point of having both. */}
           <StatTile
-            label="Pace"
+            label={`Pace · ${insights.paceWindowDays} days`}
             value={insights.avgPagesPerDay}
             unit="pp / day"
-            note={`Mean over the last ${insights.paceWindowDays} days`}
+            note="Recent form"
+          />
+          <StatTile
+            label={`Pace · ${insights.year}`}
+            value={insights.avgPagesPerDayThisYear}
+            unit="pp / day"
+            note={`Every day since 1 Jan ${insights.year}`}
           />
           <StatTile
             label="On the shelf"
             value={insights.booksOnShelf}
             note="Reading or waiting to start"
+            wide
           />
         </div>
 
         <PagesByMonthChart data={insights.pagesByMonth} />
-        <GenreChart data={insights.booksByGenre} />
       </div>
     </>
   );
@@ -88,14 +95,22 @@ function StatTile({
   value,
   unit,
   note,
+  wide,
 }: {
   label: string;
   value: string | number;
   unit?: string;
   note: string;
+  /** Spans both columns, so an odd tile does not sit orphaned. */
+  wide?: boolean;
 }) {
   return (
-    <div className="rounded-card border border-rule bg-paper-dark px-3 py-2.5">
+    <div
+      className={cx(
+        "rounded-card border border-rule bg-paper-dark px-3 py-2.5",
+        wide && "col-span-2"
+      )}
+    >
       <p className="label-caps text-charcoal/55">{label}</p>
       <p className="tnum mt-1.5 flex items-baseline gap-1 leading-none text-ink">
         <span className="text-[26px] font-semibold">{value}</span>

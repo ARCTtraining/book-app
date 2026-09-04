@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSampleLibrary } from "./seed";
-import { computeInsights, MONTH_WINDOW } from "./insights";
+import { computeInsights, monthsThisYear } from "./insights";
 import { computeStreak } from "./streaks";
 import { todayKey } from "./dates";
 
@@ -52,16 +52,10 @@ describe("buildSampleLibrary", () => {
 
   it("gives the charts something to draw across the window", () => {
     const insights = computeInsights(state, today);
-    expect(insights.pagesByMonth).toHaveLength(MONTH_WINDOW);
+    expect(insights.pagesByMonth).toHaveLength(monthsThisYear(today).length);
     expect(insights.pagesByMonth.filter((m) => m.pages > 0).length).toBeGreaterThan(3);
-    expect(insights.booksByGenre.length).toBeGreaterThan(2);
   });
 
-  it("accounts for every book in the genre breakdown", () => {
-    const insights = computeInsights(state, today);
-    const total = insights.booksByGenre.reduce((sum, g) => sum + g.books, 0);
-    expect(total).toBe(state.entries.length);
-  });
 
   it("is deterministic, so the demo looks the same on every reload", () => {
     const again = buildSampleLibrary(today);

@@ -305,7 +305,7 @@ const offline = await poll(`(() => {
   const h1 = document.querySelector('main h1');
   const charts = document.querySelectorAll('svg.recharts-surface').length;
   return {
-    done: !!h1 && charts >= 2,
+    done: !!h1 && charts >= 1,
     title: h1 && h1.textContent,
     tabs: document.querySelectorAll('nav a').length,
     tiles: document.querySelectorAll('main .grid > div').length,
@@ -314,8 +314,8 @@ const offline = await poll(`(() => {
 })()`);
 check("still renders a full screen", offline.title === "Insights", offline);
 check("tab bar survives", offline.tabs === 3, offline);
-check("stat tiles render", offline.tiles === 4, offline);
-check("both charts render", offline.charts >= 2, offline);
+check("stat tiles render", offline.tiles === 5, offline);
+check("the pages chart renders", offline.charts >= 1, offline);
 
 console.log("\nlayout");
 await send("Network.emulateNetworkConditions", {

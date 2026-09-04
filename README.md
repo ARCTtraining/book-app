@@ -14,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 139 unit tests over lib/ (vitest)
+npm test             # 156 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -163,6 +163,15 @@ SYNC_PASSPHRASE=...             # guards /api/sync on a public deployment
 
 Enter the same passphrase once per device under **Settings → Sync**. It is
 kept per device and never travels with the shelf.
+
+Once a device knows the passphrase it syncs **on open** and **on close** —
+close uses `fetch(keepalive)`, since `sendBeacon` cannot carry the passphrase
+header. A close with nothing changed sends no request. **Sync now** stays for
+forcing it, because automatic sync is silent when it fails.
+
+A sync takes a few seconds: the read, the merge and the write share one
+connection, and connecting to MotherDuck alone is about two seconds. Nothing
+waits on it — the shelf renders from localStorage immediately.
 
 Connection is over MotherDuck's Postgres wire endpoint using `pg`, so no
 native DuckDB binaries end up in the function. The SQL dialect on the far side

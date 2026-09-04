@@ -8,11 +8,22 @@ import {
   type DayKey,
 } from "./dates";
 
-/** How far back the pages-by-month line reaches. */
-export const MONTH_WINDOW = 6;
-
-/** Trailing window for the pace figure. Recent enough to be actionable. */
+/** Trailing window for the recent pace figure. Recent enough to be actionable. */
 export const PACE_WINDOW_DAYS = 30;
+
+/**
+ * Months shown on the pages-by-month line: January of the current year
+ * through the current month.
+ *
+ * A trailing window kept sliding earlier months off the chart mid-year. The
+ * calendar year is the span a reader actually thinks in, and stopping at the
+ * current month keeps months that have not happened yet off the axis, where
+ * they would read as months with no reading.
+ */
+export function monthsThisYear(today: DayKey): string[] {
+  const [year, month] = today.split("-").map(Number);
+  return Array.from({ length: month }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+}
 
 export function computeInsights(
   state: LibraryState,
@@ -38,10 +49,29 @@ export function computeInsights(
     booksFinished,
     avgPagesPerDay: avgPagesPerDay(state, today),
     paceWindowDays: PACE_WINDOW_DAYS,
+    avgPagesPerDayThisYear: avgPagesPerDayThisYear(state, today),
+    year: Number(today.slice(0, 4)),
     booksOnShelf,
     pagesByMonth: pagesByMonth(state, today),
-    booksByGenre: booksByGenre(state),
   };
+}
+
+/**
+ * Mean pages/day across the calendar year so far.
+ *
+ * Divides by every day elapsed since 1 January, not by the days with reading
+ * on them — a year-to-date pace that counts the quiet days is the honest one,
+ * and it is what makes the figure comparable between months.
+ */
+function avgPagesPerDayThisYear(state: LibraryState, today: DayKey): number {
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const pages = state.logs
+    .filter((log) => log.day >= yearStart && log.day <= today)
+    .reduce((sum, log) => sum + log.pagesRead, 0);
+
+  if (pages === 0) return 0;
+  const daysElapsed = daysBetween(yearStart, today) + 1;
+  return Math.round(pages / Math.max(1, daysElapsed));
 }
 
 /**
@@ -68,7 +98,7 @@ function avgPagesPerDay(state: LibraryState, today: DayKey): number {
   return Math.round(pages / divisor);
 }
 
-/** Pages logged per month across the trailing window, gaps filled with 0. */
+/** Pages logged in each month of the year so far, gaps filled with 0. */
 function pagesByMonth(state: LibraryState, today: DayKey) {
   const totals = new Map<string, number>();
   for (const log of state.logs) {
@@ -76,29 +106,10 @@ function pagesByMonth(state: LibraryState, today: DayKey) {
     totals.set(key, (totals.get(key) ?? 0) + log.pagesRead);
   }
 
-  const [year, month] = today.split("-").map(Number);
-  return Array.from({ length: MONTH_WINDOW }, (_, i) => {
-    const date = new Date(year, month - 1 - (MONTH_WINDOW - 1 - i), 1);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return { month: key, label: monthLabel(key), pages: totals.get(key) ?? 0 };
-  });
+  return monthsThisYear(today).map((key) => ({
+    month: key,
+    label: monthLabel(key),
+    pages: totals.get(key) ?? 0,
+  }));
 }
 
-/**
- * Books per genre, densest first.
- *
- * Built from whatever genres are actually on the shelf rather than a known
- * list, since Google Books categories are uncontrolled — a whitelist would
- * quietly drop books from the chart. Ties break alphabetically so the order
- * is stable between renders.
- */
-function booksByGenre(state: LibraryState) {
-  const counts = new Map<string, number>();
-  for (const entry of state.entries) {
-    counts.set(entry.book.genre, (counts.get(entry.book.genre) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .map(([genre, books]) => ({ genre, books }))
-    .sort((a, b) => b.books - a.books || a.genre.localeCompare(b.genre));
-}

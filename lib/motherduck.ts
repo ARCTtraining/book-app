@@ -1,5 +1,5 @@
 import { Client } from "pg";
-import type { Mergeable } from "./merge";
+import { sameLibrary, type Mergeable } from "./merge";
 import type { ProgressLog, ShelfEntry, Tombstone } from "./types";
 
 /**
@@ -90,8 +90,17 @@ function toEntry(row: EntryRow): ShelfEntry {
   };
 }
 
-export async function readLibrary(): Promise<Mergeable> {
-  return withClient(async (client) => {
+/** A DATE column as a local calendar day; `toISOString` would shift it. */
+function dayFrom(value: Date | string): string {
+  if (typeof value === "string") return value.slice(0, 10);
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+async function readOn(client: Client): Promise<Mergeable> {
+  {
     const entries = await client.query<EntryRow>(`
       SELECT e.id, e.book_id, e.status, e.current_page, e.added_at,
              e.started_at, e.finished_at, e.updated_at,
@@ -120,8 +129,7 @@ export async function readLibrary(): Promise<Mergeable> {
         (row): ProgressLog => ({
           id: row.id,
           entryId: row.entry_id,
-          // `day` is a calendar date; take its own components, not UTC's.
-          day: new Date(row.day).toISOString().slice(0, 10),
+          day: dayFrom(row.day),
           pagesRead: Number(row.pages_read),
           page: Number(row.page),
           at: iso(row.logged_at)!,
@@ -131,10 +139,39 @@ export async function readLibrary(): Promise<Mergeable> {
         (row): Tombstone => ({ id: row.id, deletedAt: iso(row.deleted_at)! })
       ),
     };
-  });
+  }
 }
 
 /* Writing ------------------------------------------------------------------ */
+
+/**
+ * Inserts many rows in one statement.
+ *
+ * A row-at-a-time loop is a separate round trip to a remote database each
+ * time; a seventeen-book shelf took sixty of them and twenty-three seconds.
+ * Chunked so the parameter count stays sane on a large shelf.
+ */
+async function insertRows(
+  client: Client,
+  table: string,
+  columns: string[],
+  rows: unknown[][]
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const CHUNK = 100;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const params: unknown[] = [];
+    const tuples = chunk.map(
+      (row) => `(${row.map((value) => `$${params.push(value)}`).join(",")})`
+    );
+    await client.query(
+      `INSERT INTO ${table} (${columns.join(", ")}) VALUES ${tuples.join(", ")}`,
+      params
+    );
+  }
+}
 
 /**
  * Replaces the stored shelf with `state`.
@@ -142,58 +179,75 @@ export async function readLibrary(): Promise<Mergeable> {
  * The caller has already merged, so this is a straight overwrite rather than
  * an upsert dance — simpler to reason about, and the volumes are tiny.
  */
-export async function writeLibrary(state: Mergeable): Promise<void> {
-  await withClient(async (client) => {
+async function writeOn(client: Client, state: Mergeable): Promise<void> {
+  // Two entries can share a book; the books table takes each one once.
+  const books = new Map(state.entries.map((entry) => [entry.book.id, entry.book]));
+
+  {
     await client.query("BEGIN");
     try {
       await client.query("DELETE FROM progress_logs");
       await client.query("DELETE FROM shelf_entries");
       await client.query("DELETE FROM deleted_entries");
+      await client.query("DELETE FROM books");
 
-      // Books are shared across entries and worth keeping, so they are
-      // upserted rather than cleared.
-      for (const entry of state.entries) {
-        const b = entry.book;
-        await client.query(
-          `INSERT INTO books (id, isbn13, title, author, page_count, genre, year, blurb, thumbnail_url)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-           ON CONFLICT (id) DO UPDATE SET
-             isbn13 = excluded.isbn13, title = excluded.title,
-             author = excluded.author, page_count = excluded.page_count,
-             genre = excluded.genre, year = excluded.year,
-             blurb = excluded.blurb, thumbnail_url = excluded.thumbnail_url`,
-          [b.id, b.isbn13 ?? null, b.title, b.author, b.pageCount, b.genre,
-           b.year ?? null, b.blurb ?? null, b.thumbnailUrl ?? null]
-        );
+      await insertRows(
+        client,
+        "books",
+        ["id", "isbn13", "title", "author", "page_count", "genre", "year", "blurb", "thumbnail_url"],
+        [...books.values()].map((b) => [
+          b.id, b.isbn13 ?? null, b.title, b.author, b.pageCount,
+          b.genre, b.year ?? null, b.blurb ?? null, b.thumbnailUrl ?? null,
+        ])
+      );
 
-        await client.query(
-          `INSERT INTO shelf_entries
-             (id, book_id, status, current_page, added_at, started_at, finished_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [entry.id, b.id, entry.status, entry.currentPage, entry.addedAt,
-           entry.startedAt ?? null, entry.finishedAt ?? null, entry.updatedAt]
-        );
-      }
+      await insertRows(
+        client,
+        "shelf_entries",
+        ["id", "book_id", "status", "current_page", "added_at", "started_at", "finished_at", "updated_at"],
+        state.entries.map((e) => [
+          e.id, e.book.id, e.status, e.currentPage, e.addedAt,
+          e.startedAt ?? null, e.finishedAt ?? null, e.updatedAt,
+        ])
+      );
 
-      for (const log of state.logs) {
-        await client.query(
-          `INSERT INTO progress_logs (id, entry_id, day, pages_read, page, logged_at)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [log.id, log.entryId, log.day, log.pagesRead, log.page, log.at]
-        );
-      }
+      await insertRows(
+        client,
+        "progress_logs",
+        ["id", "entry_id", "day", "pages_read", "page", "logged_at"],
+        state.logs.map((l) => [l.id, l.entryId, l.day, l.pagesRead, l.page, l.at])
+      );
 
-      for (const stone of state.tombstones) {
-        await client.query(
-          `INSERT INTO deleted_entries (id, deleted_at) VALUES ($1,$2)`,
-          [stone.id, stone.deletedAt]
-        );
-      }
+      await insertRows(
+        client,
+        "deleted_entries",
+        ["id", "deleted_at"],
+        state.tombstones.map((t) => [t.id, t.deletedAt])
+      );
 
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
     }
+  }
+}
+
+/**
+ * One connection, one sync.
+ *
+ * Reading and writing used to open a connection each, and connecting to
+ * MotherDuck costs about two seconds — half of every sync was handshakes.
+ * `prepare` merges the caller's shelf with what is stored; the write is
+ * skipped when the result is identical to what is already there.
+ */
+export async function syncShelf(
+  prepare: (theirs: Mergeable) => Mergeable
+): Promise<Mergeable> {
+  return withClient(async (client) => {
+    const theirs = await readOn(client);
+    const merged = prepare(theirs);
+    if (!sameLibrary(merged, theirs)) await writeOn(client, merged);
+    return merged;
   });
 }

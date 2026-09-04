@@ -178,8 +178,10 @@ export interface CatalogResults {
  * with the reason attached, so Search always shows something usable.
  */
 export async function searchCatalog(query: string): Promise<CatalogResults> {
+  // No query, no results. Listing the sample catalogue here presented twelve
+  // books the reader does not own as though they were their shelf.
   if (!query.trim()) {
-    return { books: SAMPLE_CATALOG, source: "sample" };
+    return { books: [], source: "sample" };
   }
 
   try {

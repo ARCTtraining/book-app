@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { mergeLibraries, type Mergeable } from "@/lib/merge";
 import { repairBackfillLogs } from "@/lib/library";
-import { motherduckConfigured, readLibrary, writeLibrary } from "@/lib/motherduck";
+import { motherduckConfigured, syncShelf } from "@/lib/motherduck";
 
 /**
  * Two-way shelf sync.
@@ -69,9 +69,11 @@ export async function POST(request: Request) {
     // sends backfill logs dated when the book was entered rather than when
     // it was finished; unrepaired, those union with the corrected rows and
     // the pages count twice.
-    const theirs = await readLibrary();
-    const merged = mergeLibraries(repairBackfillLogs(mine), theirs);
-    await writeLibrary(merged);
+    // One connection for the read, the merge and the write. Opening the app
+    // on a device that is already up to date writes nothing at all.
+    const merged = await syncShelf((theirs) =>
+      mergeLibraries(repairBackfillLogs(mine), theirs)
+    );
 
     return NextResponse.json({
       ...merged,

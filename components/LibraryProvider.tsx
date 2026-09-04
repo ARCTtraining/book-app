@@ -24,6 +24,7 @@ import { computeStreak } from "@/lib/streaks";
 import { buildSampleLibrary } from "@/lib/seed";
 import {
   readLastSynced,
+  readPassphrase,
   syncLibrary,
   writeLastSynced,
   type SyncOutcome,
@@ -178,30 +179,80 @@ export function LibraryProvider({
   // when it runs rather than whatever was captured when `sync` was created.
   // Written in an effect rather than during render, which React forbids.
   const stateRef = useRef(state);
+
+  // The state as it stood after the last successful sync. Every operation
+  // returns a new object, so an identity check is enough to know whether
+  // there is anything worth uploading.
+  const syncedStateRef = useRef<LibraryState | null>(null);
+  const markSyncedRef = useRef(false);
+  const inFlightRef = useRef(false);
+
   useEffect(() => {
     stateRef.current = state;
+    if (markSyncedRef.current) {
+      syncedStateRef.current = state;
+      markSyncedRef.current = false;
+    }
   }, [state]);
 
-  const sync = useCallback<LibraryContextValue["sync"]>(
-    async (passphrase) => {
+  const runSync = useCallback(
+    async (passphrase: string, keepalive = false): Promise<SyncOutcome> => {
+      // Two syncs racing would each merge against a different snapshot.
+      if (inFlightRef.current) return { ok: false, reason: "server", message: "" };
+      inFlightRef.current = true;
       setSyncing(true);
       try {
-        const outcome = await syncLibrary(stateRef.current, passphrase);
+        const sent = stateRef.current;
+        const outcome = await syncLibrary(sent, passphrase, { keepalive });
 
         if (outcome.ok) {
           // Merge in, rather than replace: settings are per-device and do
-          // not travel, and edits made mid-flight must not be dropped.
+          // not travel, and edits made mid-flight must not be dropped. The
+          // resulting state is recorded as the synced one by the mirror
+          // effect below — a state updater must stay free of side effects.
+          markSyncedRef.current = true;
           setState((latest) => ({ ...latest, ...outcome.merged }));
           writeLastSynced(outcome.syncedAt);
           setLastSyncedAt(outcome.syncedAt);
         }
         return outcome;
       } finally {
+        inFlightRef.current = false;
         setSyncing(false);
       }
     },
     []
   );
+
+  const sync = useCallback<LibraryContextValue["sync"]>(
+    (passphrase) => runSync(passphrase),
+    [runSync]
+  );
+
+  /**
+   * Automatic sync, once the device knows the passphrase.
+   *
+   * On open so a second device catches up without being asked, and on the
+   * way out so the day's reading is not stranded on one phone. Manual "Sync
+   * now" stays, because automatic sync is silent when it fails.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    const passphrase = readPassphrase();
+    if (!passphrase) return;
+
+    void runSync(passphrase);
+
+    const onHidden = () => {
+      // Nothing changed since the last sync: no request.
+      if (document.visibilityState !== "hidden") return;
+      if (stateRef.current === syncedStateRef.current) return;
+      void runSync(passphrase, true);
+    };
+
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [ready, runSync]);
 
   const shelfStatusOf = useCallback(
     (bookId: string) => library.findEntryByBook(state, bookId)?.status ?? null,

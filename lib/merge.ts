@@ -86,6 +86,25 @@ export function applyTombstones(
 /** The shelf-shaped part of a state — everything sync exchanges. */
 export type Mergeable = Pick<LibraryState, "entries" | "logs" | "tombstones">;
 
+/**
+ * Whether two shelves hold the same thing, order aside.
+ *
+ * Lets a sync that changed nothing skip the write entirely — opening the app
+ * on a second device is a read, and a write to an analytical store is by far
+ * the expensive half.
+ */
+export function sameLibrary(a: Mergeable, b: Mergeable): boolean {
+  const key = (state: Mergeable) =>
+    JSON.stringify({
+      entries: [...state.entries].sort((x, y) => x.id.localeCompare(y.id)),
+      logs: [...state.logs].sort((x, y) =>
+        `${x.entryId}|${x.day}`.localeCompare(`${y.entryId}|${y.day}`)
+      ),
+      tombstones: [...state.tombstones].sort((x, y) => x.id.localeCompare(y.id)),
+    });
+  return key(a) === key(b);
+}
+
 export function mergeLibraries(mine: Mergeable, theirs: Mergeable): Mergeable {
   const tombstones = mergeTombstones(mine.tombstones, theirs.tombstones);
   const settled = applyTombstones(

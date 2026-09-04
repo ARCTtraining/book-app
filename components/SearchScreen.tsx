@@ -48,11 +48,11 @@ export function SearchScreen() {
     };
   }, [query]);
 
-  const caption = pending
-    ? "Searching…"
-    : query
-      ? `${books.length} ${books.length === 1 ? "match" : "matches"} for “${query}”`
-      : `${books.length} books in the sample catalogue`;
+  const caption = !query
+    ? "Search Google Books by title or author"
+    : pending
+      ? "Searching…"
+      : `${books.length} ${books.length === 1 ? "match" : "matches"} for “${query}”`;
 
   return (
     <>
@@ -101,7 +101,14 @@ export function SearchScreen() {
             <SearchResultCard key={book.id} book={book} />
           ))}
 
-          {!pending && books.length === 0 && (
+          {!query && (
+            <EmptyState
+              title="What are you reading?"
+              body="Search by title or author to add a book to your shelf — or record one you have already finished."
+            />
+          )}
+
+          {query && !pending && books.length === 0 && (
             <EmptyState
               title="No matches"
               body={`Nothing matches “${query}”. Try an author's surname, or fewer words.`}

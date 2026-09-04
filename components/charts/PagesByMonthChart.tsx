@@ -30,13 +30,13 @@ export function PagesByMonthChart({
   // stops the closing dip from reading as a collapse in reading.
   const note =
     total > 0
-      ? `${total.toLocaleString()} pages over ${data.length} months · ${current.label} still in progress`
+      ? `${total.toLocaleString()} pages this year · ${current.label} still in progress`
       : "Nothing logged yet — pages appear here as you record them.";
 
   return (
     <ChartFrame title="Pages by month" note={note} height={168}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -8 }}>
           <CartesianGrid
             stroke={CHART_COLORS.rule}
             strokeWidth={1}
@@ -53,7 +53,9 @@ export function PagesByMonthChart({
             tick={AXIS_TICK}
             tickLine={false}
             axisLine={false}
-            width={44}
+            // Wide enough for a four-figure month: at 44px "1200" was
+            // clipped to "200", quietly understating the best month by 1000.
+            width={52}
             allowDecimals={false}
           />
           <Tooltip

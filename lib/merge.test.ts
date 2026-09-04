@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeLibraries, mergeLogs, type Mergeable } from "./merge";
+import { mergeLibraries, mergeLogs, sameLibrary, type Mergeable } from "./merge";
 import { SAMPLE_CATALOG } from "./catalog";
 import type { ProgressLog, ShelfEntry } from "./types";
 
@@ -126,5 +126,47 @@ describe("mergeLogs", () => {
       [log("b", "2026-03-01", 25)]
     );
     expect(merged).toHaveLength(2);
+  });
+});
+
+describe("sameLibrary", () => {
+  const base = shelf({
+    entries: [entry("a", "2026-03-01T00:00:00.000Z")],
+    logs: [log("a", "2026-03-01", 30)],
+  });
+
+  it("ignores ordering", () => {
+    // Rows come back from the database in no particular order; a reorder
+    // must not be mistaken for a change and trigger a pointless rewrite.
+    const reordered = shelf({
+      entries: [entry("b", "2026-03-02T00:00:00.000Z"), entry("a", "2026-03-01T00:00:00.000Z")],
+      logs: [log("a", "2026-03-02", 10), log("a", "2026-03-01", 30)],
+    });
+    const forwards = shelf({
+      entries: [entry("a", "2026-03-01T00:00:00.000Z"), entry("b", "2026-03-02T00:00:00.000Z")],
+      logs: [log("a", "2026-03-01", 30), log("a", "2026-03-02", 10)],
+    });
+    expect(sameLibrary(reordered, forwards)).toBe(true);
+  });
+
+  it("notices a changed page", () => {
+    const moved = shelf({
+      entries: [entry("a", "2026-03-02T00:00:00.000Z", { currentPage: 90 })],
+      logs: [log("a", "2026-03-01", 30)],
+    });
+    expect(sameLibrary(base, moved)).toBe(false);
+  });
+
+  it("notices an added or removed book", () => {
+    const extra = shelf({
+      entries: [entry("a", "2026-03-01T00:00:00.000Z"), entry("b", "2026-03-01T00:00:00.000Z")],
+      logs: [log("a", "2026-03-01", 30)],
+    });
+    expect(sameLibrary(base, extra)).toBe(false);
+    expect(sameLibrary(base, shelf())).toBe(false);
+  });
+
+  it("says two empty shelves match", () => {
+    expect(sameLibrary(shelf(), shelf())).toBe(true);
   });
 });

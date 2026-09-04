@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeInsights, MONTH_WINDOW, PACE_WINDOW_DAYS } from "./insights";
+import { computeInsights, monthsThisYear, PACE_WINDOW_DAYS } from "./insights";
 import { addToShelf, markFinished, updateProgress } from "./library";
 import { emptyState } from "./storage";
 import { SAMPLE_CATALOG } from "./catalog";
@@ -19,9 +19,8 @@ describe("computeInsights", () => {
     expect(insights.booksFinished).toBe(0);
     expect(insights.avgPagesPerDay).toBe(0);
     expect(insights.booksOnShelf).toBe(0);
-    expect(insights.booksByGenre).toEqual([]);
     // The axis still needs its buckets.
-    expect(insights.pagesByMonth).toHaveLength(MONTH_WINDOW);
+    expect(insights.pagesByMonth).toHaveLength(monthsThisYear(today).length);
     expect(insights.pagesByMonth.every((m) => m.pages === 0)).toBe(true);
   });
 
@@ -49,25 +48,6 @@ describe("computeInsights", () => {
     expect(insights.booksFinished).toBe(1);
   });
 
-  it("keeps every genre on the shelf, densest first", () => {
-    // Google Books categories are uncontrolled, so nothing may be filtered
-    // against a known list.
-    const state: LibraryState = {
-      ...emptyState(),
-      entries: [
-        entry("1", "Poetry"),
-        entry("2", "Hobbies & Home / Crafts"),
-        entry("3", "Poetry"),
-      ],
-    };
-
-    const { booksByGenre } = computeInsights(state, today);
-    expect(booksByGenre).toEqual([
-      { genre: "Poetry", books: 2 },
-      { genre: "Hobbies & Home / Crafts", books: 1 },
-    ]);
-  });
-
   it("buckets pages into the trailing months and fills gaps with zero", () => {
     const state: LibraryState = {
       ...emptyState(),
@@ -75,9 +55,9 @@ describe("computeInsights", () => {
     };
 
     const { pagesByMonth } = computeInsights(state, today);
-    expect(pagesByMonth).toHaveLength(MONTH_WINDOW);
+    expect(pagesByMonth).toHaveLength(monthsThisYear(today).length);
     // The window ends on the current month.
-    expect(pagesByMonth[MONTH_WINDOW - 1].month).toBe(today.slice(0, 7));
+    expect(pagesByMonth[monthsThisYear(today).length - 1].month).toBe(today.slice(0, 7));
     expect(pagesByMonth.reduce((sum, m) => sum + m.pages, 0)).toBe(40);
   });
 
@@ -107,18 +87,84 @@ describe("computeInsights", () => {
   });
 });
 
-function entry(id: string, genre: string) {
-  return {
-    id,
-    book: { ...piranesi, id: `book-${id}`, genre },
-    status: "want" as const,
-    currentPage: 0,
-    addedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
 function mkLog(id: string, daysAgo: number, pagesRead: number): ProgressLog {
   const day = shiftDay(today, -daysAgo);
   return { id, entryId: "e", day, pagesRead, page: pagesRead, at: day };
 }
+
+describe("the year-to-date view", () => {
+  it("shows every month of the year so far, and none that have not happened", () => {
+    // A trailing window slid February off the chart by August; the calendar
+    // year is the span a reader thinks in.
+    const months = monthsThisYear("2026-09-04");
+    expect(months).toHaveLength(9);
+    expect(months[0]).toBe("2026-01");
+    expect(months[8]).toBe("2026-09");
+  });
+
+  it("is a single month in January", () => {
+    expect(monthsThisYear("2026-01-15")).toEqual(["2026-01"]);
+  });
+
+  it("charts pages against those months, filling quiet ones with zero", () => {
+    const state: LibraryState = {
+      ...emptyState(),
+      logs: [
+        { id: "a", entryId: "e", day: "2026-02-18", pagesRead: 347, page: 347, at: "x" },
+        { id: "b", entryId: "e", day: "2026-08-31", pagesRead: 246, page: 246, at: "x" },
+      ],
+    };
+    const { pagesByMonth } = computeInsights(state, "2026-09-04");
+
+    expect(pagesByMonth).toHaveLength(9);
+    expect(pagesByMonth.find((m) => m.month === "2026-02")?.pages).toBe(347);
+    expect(pagesByMonth.find((m) => m.month === "2026-08")?.pages).toBe(246);
+    expect(pagesByMonth.find((m) => m.month === "2026-05")?.pages).toBe(0);
+  });
+
+  it("leaves last year's reading off this year's chart", () => {
+    const state: LibraryState = {
+      ...emptyState(),
+      logs: [{ id: "a", entryId: "e", day: "2025-12-30", pagesRead: 400, page: 400, at: "x" }],
+    };
+    const { pagesByMonth } = computeInsights(state, "2026-09-04");
+    expect(pagesByMonth.every((m) => m.pages === 0)).toBe(true);
+  });
+});
+
+describe("pace for the year", () => {
+  const yearLogs = (...days: [string, number][]): LibraryState => ({
+    ...emptyState(),
+    logs: days.map(([day, pagesRead], i) => ({
+      id: String(i), entryId: "e", day, pagesRead, page: pagesRead, at: day,
+    })),
+  });
+
+  it("divides by every day of the year so far, not the days with reading", () => {
+    // 1 Jan to 10 Jan inclusive is 10 days; 500 pages is 50/day.
+    const insights = computeInsights(yearLogs(["2026-01-05", 500]), "2026-01-10");
+    expect(insights.avgPagesPerDayThisYear).toBe(50);
+  });
+
+  it("counts the quiet days, so a gap lowers the pace", () => {
+    const busy = computeInsights(yearLogs(["2026-01-02", 300]), "2026-01-10");
+    const same = computeInsights(yearLogs(["2026-01-02", 300]), "2026-03-10");
+    expect(same.avgPagesPerDayThisYear).toBeLessThan(busy.avgPagesPerDayThisYear);
+  });
+
+  it("ignores reading from another year", () => {
+    const insights = computeInsights(
+      yearLogs(["2025-06-01", 5000], ["2026-01-05", 100]),
+      "2026-01-10"
+    );
+    expect(insights.avgPagesPerDayThisYear).toBe(10);
+  });
+
+  it("is zero with nothing logged this year", () => {
+    expect(computeInsights(emptyState(), "2026-09-04").avgPagesPerDayThisYear).toBe(0);
+  });
+
+  it("reports the year it covers", () => {
+    expect(computeInsights(emptyState(), "2026-09-04").year).toBe(2026);
+  });
+});

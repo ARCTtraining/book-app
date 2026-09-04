@@ -40,7 +40,8 @@ function payload(state: LibraryState): Mergeable {
 
 export async function syncLibrary(
   state: LibraryState,
-  passphrase: string
+  passphrase: string,
+  options: { keepalive?: boolean } = {}
 ): Promise<SyncOutcome> {
   if (!passphrase) return fail("passphrase");
 
@@ -53,6 +54,10 @@ export async function syncLibrary(
         "x-sync-passphrase": passphrase,
       },
       body: JSON.stringify(payload(state)),
+      // On the way out the page may be torn down mid-request. `keepalive`
+      // lets it finish; `sendBeacon` cannot, because it carries no custom
+      // headers and the passphrase travels in one.
+      keepalive: options.keepalive ?? false,
     });
   } catch {
     return fail("offline");

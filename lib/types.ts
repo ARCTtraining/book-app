@@ -114,7 +114,10 @@ export interface InsightsSummary {
   /** Mean pages/day across the trailing window, rounded. */
   avgPagesPerDay: number;
   paceWindowDays: number;
+  /** Mean pages/day across the calendar year to date. */
+  avgPagesPerDayThisYear: number;
+  /** The calendar year the year-to-date figures cover. */
+  year: number;
   booksOnShelf: number;
   pagesByMonth: { month: string; label: string; pages: number }[];
-  booksByGenre: { genre: string; books: number }[];
 }
