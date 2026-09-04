@@ -170,3 +170,38 @@ describe("sameLibrary", () => {
     expect(sameLibrary(shelf(), shelf())).toBe(true);
   });
 });
+
+describe("a day is a day, whatever form it arrives in", () => {
+  it("collapses a plain day and a full timestamp for the same book", () => {
+    // This took production sync down: the two keys survived the merge and
+    // then violated the unique index on (entry_id, day).
+    const plain: ProgressLog = {
+      id: "a", entryId: "e", day: "2026-08-22", pagesRead: 80, page: 80, at: "x",
+    };
+    const stamped: ProgressLog = {
+      ...plain, id: "b", day: "2026-08-22T00:00:00.000Z", pagesRead: 40,
+    };
+
+    const merged = mergeLogs([plain], [stamped]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].day).toBe("2026-08-22");
+    // The further progress still wins.
+    expect(merged[0].pagesRead).toBe(80);
+  });
+
+  it("normalises the day it stores, not just the one it compares", () => {
+    const stamped: ProgressLog = {
+      id: "a", entryId: "e", day: "2026-08-22T12:00:00.000Z",
+      pagesRead: 10, page: 10, at: "x",
+    };
+    expect(mergeLogs([stamped], [])[0].day).toBe("2026-08-22");
+  });
+
+  it("keeps genuinely different days apart", () => {
+    const a: ProgressLog = {
+      id: "a", entryId: "e", day: "2026-08-22", pagesRead: 10, page: 10, at: "x",
+    };
+    const b: ProgressLog = { ...a, id: "b", day: "2026-08-23T00:00:00.000Z" };
+    expect(mergeLogs([a], [b])).toHaveLength(2);
+  });
+});

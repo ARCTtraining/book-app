@@ -55,9 +55,14 @@ export function mergeTombstones(
 export function mergeLogs(mine: ProgressLog[], theirs: ProgressLog[]): ProgressLog[] {
   const merged = new Map<string, ProgressLog>();
   for (const log of [...theirs, ...mine]) {
-    const key = `${log.entryId}|${log.day}`;
+    // A day is the first ten characters, whatever the client sent. An older
+    // build could store a full timestamp here, and "2026-08-22" alongside
+    // "2026-08-22T00:00:00.000Z" is two keys that are one calendar day —
+    // they survived the merge and then collided in the database.
+    const day = log.day.slice(0, 10);
+    const key = `${log.entryId}|${day}`;
     const held = merged.get(key);
-    if (!held || log.pagesRead > held.pagesRead) merged.set(key, log);
+    if (!held || log.pagesRead > held.pagesRead) merged.set(key, { ...log, day });
   }
   return [...merged.values()];
 }

@@ -211,11 +211,19 @@ async function writeOn(client: Client, state: Mergeable): Promise<void> {
         ])
       );
 
+      // Last guard before the unique index on (entry_id, day). The merge
+      // already collapses a day to one record; this makes a malformed
+      // payload a lost duplicate rather than a failed sync.
+      const oneLogPerDay = new Map(
+        state.logs.map((l) => [`${l.entryId}|${l.day.slice(0, 10)}`, l])
+      );
       await insertRows(
         client,
         "progress_logs",
         ["id", "entry_id", "day", "pages_read", "page", "logged_at"],
-        state.logs.map((l) => [l.id, l.entryId, l.day, l.pagesRead, l.page, l.at])
+        [...oneLogPerDay.values()].map((l) => [
+          l.id, l.entryId, l.day.slice(0, 10), l.pagesRead, l.page, l.at,
+        ])
       );
 
       await insertRows(
