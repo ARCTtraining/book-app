@@ -1,7 +1,7 @@
 import type { CatalogBook, LibraryState, ProgressLog, ShelfEntry } from "./types";
 import { SAMPLE_CATALOG } from "./catalog";
 import { DEFAULT_SETTINGS, STATE_VERSION } from "./storage";
-import { parseDay, shiftDay, todayKey, type DayKey } from "./dates";
+import { isoFromDay, shiftDay, todayKey, type DayKey } from "./dates";
 
 /**
  * Sample shelf for the prototype.
@@ -114,7 +114,7 @@ export function buildSampleLibrary(today: DayKey = todayKey()): LibraryState {
   const entries: ShelfEntry[] = [];
   const logs: ProgressLog[] = [];
 
-  const iso = (day: DayKey) => parseDay(day).toISOString();
+  const iso = isoFromDay;
 
   for (const spec of FINISHED) {
     const target = book(spec.title);

@@ -6,7 +6,7 @@ import type {
   ShelfEntry,
   ShelfStatus,
 } from "./types";
-import { todayKey } from "./dates";
+import { dayOf, isoFromDay, todayKey, type DayKey } from "./dates";
 
 /**
  * Domain operations over `LibraryState`.
@@ -132,6 +132,107 @@ export function logPagesToday(
   const entry = state.entries.find((e) => e.id === entryId);
   if (!entry || pages <= 0) return state;
   return updateProgress(state, entryId, entry.currentPage + pages);
+}
+
+/**
+ * Checks a proposed start/finish pair.
+ *
+ * Returns a message meant to be shown to the reader, or null when the dates
+ * are usable. Kept separate from `setEntryDates` so the form can warn while
+ * typing without committing anything.
+ */
+export function validateEntryDates(
+  started: DayKey | undefined,
+  finished: DayKey | undefined,
+  today: DayKey = todayKey()
+): string | null {
+  if (started && started > today) return "A start date cannot be in the future.";
+  if (finished && finished > today) return "A finish date cannot be in the future.";
+  if (started && finished && finished < started) {
+    return "The finish date is before the start date.";
+  }
+  return null;
+}
+
+/**
+ * Rewrites when a book was started and finished.
+ *
+ * Needed because the app otherwise stamps whatever moment you happened to
+ * tap the button — finish a book on Sunday, log it on Wednesday, and the
+ * shelf claims Wednesday. Passing null clears a date.
+ *
+ * Invalid combinations are rejected rather than stored, so the shelf can
+ * never hold a book finished before it was started.
+ */
+export function setEntryDates(
+  state: LibraryState,
+  entryId: string,
+  dates: { startedAt?: DayKey | null; finishedAt?: DayKey | null }
+): LibraryState {
+  const entry = state.entries.find((e) => e.id === entryId);
+  if (!entry) return state;
+
+  const nextStarted =
+    dates.startedAt === undefined ? dayOf(entry.startedAt) : (dates.startedAt ?? undefined);
+  const nextFinished =
+    dates.finishedAt === undefined
+      ? dayOf(entry.finishedAt)
+      : (dates.finishedAt ?? undefined);
+
+  if (validateEntryDates(nextStarted, nextFinished)) return state;
+
+  return mapEntry(state, entryId, (e) => ({
+    ...e,
+    startedAt: nextStarted ? isoFromDay(nextStarted) : undefined,
+    finishedAt: nextFinished ? isoFromDay(nextFinished) : undefined,
+  }));
+}
+
+/**
+ * Puts a book straight onto the finished shelf.
+ *
+ * For books read before the app existed. One progress log is written on the
+ * finish date so the pages land in the right month on the chart — without
+ * it, Insights would count the book in its totals but show nothing in the
+ * pages-by-month line.
+ */
+export function addFinishedBook(
+  state: LibraryState,
+  book: CatalogBook,
+  dates: { startedAt?: DayKey; finishedAt: DayKey }
+): LibraryState {
+  if (validateEntryDates(dates.startedAt, dates.finishedAt)) return state;
+
+  const existing = findEntryByBook(state, book.id);
+  const id = existing?.id ?? newId();
+
+  const entry: ShelfEntry = {
+    id,
+    book,
+    status: "finished",
+    currentPage: book.pageCount,
+    addedAt: existing?.addedAt ?? new Date().toISOString(),
+    startedAt: dates.startedAt ? isoFromDay(dates.startedAt) : undefined,
+    finishedAt: isoFromDay(dates.finishedAt),
+  };
+
+  const log: ProgressLog = {
+    id: newId(),
+    entryId: id,
+    day: dates.finishedAt,
+    pagesRead: book.pageCount,
+    page: book.pageCount,
+    at: isoFromDay(dates.finishedAt),
+  };
+
+  return {
+    ...state,
+    entries: existing
+      ? state.entries.map((e) => (e.id === id ? entry : e))
+      : [entry, ...state.entries],
+    // Replace any earlier logs for this book so re-adding cannot double-count.
+    logs: [...state.logs.filter((l) => l.entryId !== id), log],
+  };
 }
 
 export function removeEntry(state: LibraryState, entryId: string): LibraryState {

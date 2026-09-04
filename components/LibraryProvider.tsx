@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { DayKey } from "@/lib/dates";
 import type {
   CatalogBook,
   InsightsSummary,
@@ -45,6 +46,14 @@ interface LibraryContextValue {
   moveToWantToRead: (entryId: string) => void;
   updateProgress: (entryId: string, page: number) => void;
   markFinished: (entryId: string) => void;
+  setEntryDates: (
+    entryId: string,
+    dates: { startedAt?: DayKey | null; finishedAt?: DayKey | null }
+  ) => void;
+  addFinishedBook: (
+    book: CatalogBook,
+    dates: { startedAt?: DayKey; finishedAt: DayKey }
+  ) => void;
   logPagesToday: (entryId: string, pages: number) => void;
   removeEntry: (entryId: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -112,6 +121,20 @@ export function LibraryProvider({
     setState((current) => library.markFinished(current, entryId));
   }, []);
 
+  const setEntryDates = useCallback<LibraryContextValue["setEntryDates"]>(
+    (entryId, dates) => {
+      setState((current) => library.setEntryDates(current, entryId, dates));
+    },
+    []
+  );
+
+  const addFinishedBook = useCallback<LibraryContextValue["addFinishedBook"]>(
+    (book, dates) => {
+      setState((current) => library.addFinishedBook(current, book, dates));
+    },
+    []
+  );
+
   const logPagesToday = useCallback((entryId: string, pages: number) => {
     setState((current) => library.logPagesToday(current, entryId, pages));
   }, []);
@@ -152,6 +175,8 @@ export function LibraryProvider({
       moveToWantToRead,
       updateProgress,
       markFinished,
+      setEntryDates,
+      addFinishedBook,
       logPagesToday,
       removeEntry,
       updateSettings,
@@ -169,6 +194,8 @@ export function LibraryProvider({
       moveToWantToRead,
       updateProgress,
       markFinished,
+      setEntryDates,
+      addFinishedBook,
       logPagesToday,
       removeEntry,
       updateSettings,

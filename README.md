@@ -14,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 103 unit tests over lib/ (vitest)
+npm test             # 129 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -50,6 +50,17 @@ without being re-seeded, every screen still renders with the network cut for
 The streak counts consecutive local calendar days with at least one page
 update. It stays alive through today if yesterday was logged, and its zero
 state invites a first entry rather than reporting a failure.
+
+**Dates are editable.** Tapping *Edit dates* on a finished book rewrites when
+it was started and finished — otherwise the shelf records whenever you
+happened to tap the button, not when you actually read it. Search also offers
+*Already read*, which files a book straight to Finished with a date you
+choose, for backfilling books read before the app existed. Both reject a
+future date or a finish before the start.
+
+Calendar days are stored as midday-local instants. Local midnight converted to
+UTC lands on the previous day east of Greenwich, which would display a book
+finished on the 1st as the 31st.
 
 ## Design system
 

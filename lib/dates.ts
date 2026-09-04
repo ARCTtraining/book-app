@@ -41,6 +41,27 @@ export function daysBetween(from: DayKey, to: DayKey): number {
   return Math.round(ms / 86_400_000);
 }
 
+/**
+ * Stores a calendar day as an instant that reads back as the same day
+ * everywhere.
+ *
+ * Midday local is the safe choice: local midnight converted to UTC lands on
+ * the previous day east of Greenwich, so a book finished on the 1st would
+ * display as the 31st. Paired with `dayOf`, which reads local components
+ * back out.
+ */
+export function isoFromDay(day: DayKey): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
+}
+
+/** The local calendar day an instant falls on. */
+export function dayOf(iso: string | undefined): DayKey | undefined {
+  if (!iso) return undefined;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? undefined : dayKey(date);
+}
+
 /** YYYY-MM, used to bucket the pages-by-month chart. */
 export function monthKey(key: DayKey): string {
   return key.slice(0, 7);

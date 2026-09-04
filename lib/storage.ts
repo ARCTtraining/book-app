@@ -11,6 +11,29 @@ import type { LibraryState, Settings } from "./types";
 export const STORAGE_KEY = "reading-log/library";
 export const STATE_VERSION = 1;
 
+/**
+ * Marks that the one-time clear-out of the auto-seeded demo shelf has run.
+ *
+ * Earlier builds seeded a sample library on first launch. That no longer
+ * happens, but a code change cannot reach data already saved on a device, so
+ * returning readers would keep seeing books they never added.
+ */
+const DEMO_CLEARED_KEY = "reading-log/demo-cleared";
+
+/**
+ * True when every entry came from the seed generator.
+ *
+ * `seed.ts` issues ids prefixed `seed-`; anything a reader adds gets a UUID.
+ * A single self-added book is therefore enough to make this false, so a real
+ * shelf is never mistaken for demo data.
+ */
+export function isSeededDemoShelf(state: LibraryState): boolean {
+  return (
+    state.entries.length > 0 &&
+    state.entries.every((entry) => entry.id.startsWith("seed-"))
+  );
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   remindersEnabled: false,
   reminderTime: "21:00",
@@ -60,7 +83,19 @@ export const localStorageRepository: LibraryRepository = {
     if (typeof window === "undefined") return null;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      return raw ? migrate(JSON.parse(raw)) : null;
+      const state = raw ? migrate(JSON.parse(raw)) : null;
+      if (!state) return null;
+
+      // Runs at most once per device: a shelf left over from when the demo
+      // library was seeded automatically is cleared, so the reader starts
+      // with their own books. Loading the sample from Settings afterwards
+      // sticks, because the flag is already set.
+      const alreadyRun = window.localStorage.getItem(DEMO_CLEARED_KEY);
+      window.localStorage.setItem(DEMO_CLEARED_KEY, "1");
+      if (!alreadyRun && isSeededDemoShelf(state)) {
+        return { ...state, entries: [], logs: [] };
+      }
+      return state;
     } catch {
       return null;
     }
