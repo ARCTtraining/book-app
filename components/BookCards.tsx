@@ -57,7 +57,9 @@ export function SearchResultCard({ book }: { book: CatalogBook }) {
       <MetaLine items={[`${book.pageCount} pp`, book.genre, book.year?.toString()]} />
 
       {book.blurb && (
-        <p className="mt-2 text-[13px] leading-relaxed text-charcoal/70">
+        // Clamped as well as trimmed: catalogue blurbs vary wildly in length
+        // and a result card must stay scannable in a list.
+        <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-charcoal/70">
           {book.blurb}
         </p>
       )}

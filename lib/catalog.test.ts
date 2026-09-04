@@ -1,32 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { SAMPLE_CATALOG, getCatalogBook, searchCatalog, spineColor } from "./catalog";
+import { SAMPLE_CATALOG, filterSampleCatalog, getCatalogBook, spineColor } from "./catalog";
 import { dayKey, formatDayRange, parseDay, shiftDay } from "./dates";
 
-describe("searchCatalog", () => {
+describe("filterSampleCatalog", () => {
   it("returns the whole catalogue for an empty query", async () => {
-    expect(await searchCatalog("")).toHaveLength(SAMPLE_CATALOG.length);
-    expect(await searchCatalog("   ")).toHaveLength(SAMPLE_CATALOG.length);
+    expect(filterSampleCatalog("")).toHaveLength(SAMPLE_CATALOG.length);
+    expect(filterSampleCatalog("   ")).toHaveLength(SAMPLE_CATALOG.length);
   });
 
   it("matches on title, author, genre and year", async () => {
-    expect((await searchCatalog("piranesi"))[0].title).toBe("Piranesi");
-    expect((await searchCatalog("DIDION"))[0].author).toBe("Joan Didion");
-    expect((await searchCatalog("poetry"))[0].genre).toBe("Poetry");
-    expect((await searchCatalog("1945"))[0].title).toBe("The Long Ships");
+    expect((filterSampleCatalog("piranesi"))[0].title).toBe("Piranesi");
+    expect((filterSampleCatalog("DIDION"))[0].author).toBe("Joan Didion");
+    expect((filterSampleCatalog("poetry"))[0].genre).toBe("Poetry");
+    expect((filterSampleCatalog("1945"))[0].title).toBe("The Long Ships");
   });
 
   it("requires every term to match, in any order", async () => {
-    const found = await searchCatalog("weir hail");
+    const found = filterSampleCatalog("weir hail");
     expect(found).toHaveLength(1);
     expect(found[0].title).toBe("Project Hail Mary");
   });
 
   it("returns nothing for a miss", async () => {
-    expect(await searchCatalog("zzzzz")).toEqual([]);
+    expect(filterSampleCatalog("zzzzz")).toEqual([]);
   });
 
   it("ignores accents, ready for real catalogue data", async () => {
-    expect((await searchCatalog("Ishigúro"))[0].title).toBe("Klara and the Sun");
+    expect((filterSampleCatalog("Ishigúro"))[0].title).toBe("Klara and the Sun");
   });
 });
 

@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CatalogBook } from "@/lib/types";
-import { searchCatalog } from "@/lib/catalog";
+import { searchCatalog, type CatalogResults } from "@/lib/catalog";
 import { SearchResultCard } from "./BookCards";
 import { EmptyState, PageTitle } from "./ui";
+
+/** Said plainly, because the results are not what the reader asked for. */
+const FALLBACK_NOTE: Record<NonNullable<CatalogResults["reason"]>, string> = {
+  offline: "You are offline — showing the sample catalogue stored on this device.",
+  quota: "Google Books has hit its daily limit. Showing the sample catalogue.",
+  unconfigured:
+    "No Google Books key is configured, so this is the sample catalogue of 12 books.",
+  error: "Google Books could not be reached. Showing the sample catalogue.",
+};
 
 /**
  * Catalog search.
@@ -16,10 +24,9 @@ export function SearchScreen() {
   const [query, setQuery] = useState("");
   // Results carry the query they answered, so "still searching" is derived
   // rather than tracked — the two can never disagree.
-  const [results, setResults] = useState<{
-    query: string;
-    books: CatalogBook[];
-  } | null>(null);
+  const [results, setResults] = useState<(CatalogResults & { query: string }) | null>(
+    null
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   const pending = results === null || results.query !== query;
@@ -28,11 +35,12 @@ export function SearchScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    // Debounce: harmless against the mock catalog, necessary against an API.
+    // Debounce: one request per pause in typing, not per keystroke — the
+    // Google Books daily quota is small.
     const timer = setTimeout(async () => {
       const found = await searchCatalog(query);
-      if (!cancelled) setResults({ query, books: found });
-    }, query ? 180 : 0);
+      if (!cancelled) setResults({ query, ...found });
+    }, query ? 300 : 0);
 
     return () => {
       cancelled = true;
@@ -44,7 +52,7 @@ export function SearchScreen() {
     ? "Searching…"
     : query
       ? `${books.length} ${books.length === 1 ? "match" : "matches"} for “${query}”`
-      : `${books.length} books in the catalogue`;
+      : `${books.length} books in the sample catalogue`;
 
   return (
     <>
@@ -81,6 +89,13 @@ export function SearchScreen() {
           )}
         </div>
 
+        {/* Never let sample results pass as the whole of Google Books. */}
+        {!pending && results?.reason && (
+          <p className="mt-3 rounded-card border border-marigold/50 bg-paper-dark px-3 py-2 text-[12px] leading-relaxed text-charcoal/75">
+            {FALLBACK_NOTE[results.reason]}
+          </p>
+        )}
+
         <div className="mt-4 space-y-3">
           {books.map((book) => (
             <SearchResultCard key={book.id} book={book} />
@@ -89,7 +104,7 @@ export function SearchScreen() {
           {!pending && books.length === 0 && (
             <EmptyState
               title="No matches"
-              body={`Nothing in the catalogue matches “${query}”. Try an author's surname, or a genre like Poetry.`}
+              body={`Nothing matches “${query}”. Try an author's surname, or fewer words.`}
             />
           )}
         </div>

@@ -1,25 +1,15 @@
 import type { CatalogBook } from "./types";
 
 /**
- * Mock book catalog standing in for the Google Books API.
+ * Catalogue search.
  *
- * `searchCatalog` is async and returns the same shape a real search would, so
- * swapping the body for a `fetch` is the whole migration — no caller changes:
+ * Live results come from Google Books via `/api/books`, which holds the API
+ * key server-side. The sample catalogue below is the fallback: it keeps the
+ * prototype demonstrable with no key, no network, or an exhausted quota, and
+ * it is what the app shows when installed and offline.
  *
- *   GET https://www.googleapis.com/books/v1/volumes?q=<query>
- *
- *   id           ← volume.id
- *   isbn13       ← volumeInfo.industryIdentifiers.find(t => t.type === "ISBN_13")
- *   title        ← volumeInfo.title
- *   author       ← volumeInfo.authors?.[0]
- *   pageCount    ← volumeInfo.pageCount        (often missing — guard it)
- *   genre        ← volumeInfo.categories?.[0]  (uncontrolled free text)
- *   year         ← volumeInfo.publishedDate.slice(0, 4)
- *   blurb        ← volumeInfo.description
- *   thumbnailUrl ← volumeInfo.imageLinks.thumbnail
- *
- * Call it server-side from a route handler so the API key stays off the
- * client and responses can be cached.
+ * Callers get told which source answered, so the UI can say so rather than
+ * quietly presenting twelve books as the whole of Google Books.
  */
 
 export const SAMPLE_CATALOG: CatalogBook[] = [
@@ -156,13 +146,8 @@ function normalize(value: string): string {
     .trim();
 }
 
-/**
- * Filters the catalog by title, author or genre.
- *
- * Async on purpose: callers already handle the pending state, so the Google Books API
- * swap does not change any component.
- */
-export async function searchCatalog(query: string): Promise<CatalogBook[]> {
+/** Filters the bundled sample catalogue by title, author, genre or year. */
+export function filterSampleCatalog(query: string): CatalogBook[] {
   const q = normalize(query);
   if (!q) return SAMPLE_CATALOG;
 
@@ -173,6 +158,49 @@ export async function searchCatalog(query: string): Promise<CatalogBook[]> {
     );
     return terms.every((term) => haystack.includes(term));
   });
+}
+
+/** Which catalogue answered a search. */
+export type CatalogSource = "google" | "sample";
+
+export interface CatalogResults {
+  books: CatalogBook[];
+  source: CatalogSource;
+  /** Why the fallback was used, when it was. */
+  reason?: "offline" | "quota" | "unconfigured" | "error";
+}
+
+/**
+ * Searches the live catalogue, falling back to the sample one.
+ *
+ * A failed lookup is never surfaced as an error: an empty query, a missing
+ * key, an exhausted quota or no network all quietly return sample results
+ * with the reason attached, so Search always shows something usable.
+ */
+export async function searchCatalog(query: string): Promise<CatalogResults> {
+  if (!query.trim()) {
+    return { books: SAMPLE_CATALOG, source: "sample" };
+  }
+
+  try {
+    const response = await fetch(`/api/books?q=${encodeURIComponent(query)}`);
+
+    if (!response.ok) {
+      const reason =
+        response.status === 503
+          ? "unconfigured"
+          : response.status === 429
+            ? "quota"
+            : "error";
+      return { books: filterSampleCatalog(query), source: "sample", reason };
+    }
+
+    const body = (await response.json()) as { books?: CatalogBook[] };
+    return { books: body.books ?? [], source: "google" };
+  } catch {
+    // Offline, or the route is unreachable. The installed app lands here.
+    return { books: filterSampleCatalog(query), source: "sample", reason: "offline" };
+  }
 }
 
 export async function getCatalogBook(id: string): Promise<CatalogBook | null> {

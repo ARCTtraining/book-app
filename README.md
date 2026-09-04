@@ -1,11 +1,12 @@
 # Reading Log
 
-A mobile-first PWA prototype for a personal reading tracker. This phase is UI/UX
-only: a hardcoded sample catalogue stands in for the Google Books API, and
-localStorage stands in for a database. No auth, no backend.
+A mobile-first PWA prototype for a personal reading tracker. Book search runs
+against the live Google Books API; localStorage still stands in for a database.
+No auth, no server-side persistence yet.
 
 ```bash
 npm install
+cp .env.example .env.local   # then add your Google Books key
 npm run dev          # http://localhost:3000
 npm run build && npm start   # service worker only registers in production
 ```
@@ -13,7 +14,7 @@ npm run build && npm start   # service worker only registers in production
 ## Tests
 
 ```bash
-npm test             # 59 unit tests over lib/ (vitest)
+npm test             # 96 unit tests over lib/ (vitest)
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -23,10 +24,11 @@ npm run build && npm start
 npm run verify:pwa   # in a second terminal
 ```
 
-`npm test` covers the domain logic in `lib/` — streak edges, same-day log
-folding, page clamping, pace windows, genre grouping, date-key handling across
-month and year boundaries, and the internal consistency of the sample shelf.
-No DOM, no mocking; the modules are pure.
+`npm test` covers the domain logic and the Google Books adapter in `lib/` —
+streak edges, same-day log folding, page clamping, pace windows, genre
+grouping, date keys across month and year boundaries, the internal consistency
+of the sample shelf, and every mapping rule applied to raw Google volumes. No
+DOM and no network; the modules are pure and `fetch` is injected.
 
 `npm run verify:pwa` drives headless Chrome over the DevTools Protocol at a
 390×844 viewport and checks the things a unit test cannot: the worker installs
@@ -41,7 +43,7 @@ without being re-seeded, every screen still renders with the network cut for
 | Route       | What it is                                                      |
 | ----------- | --------------------------------------------------------------- |
 | `/`         | Shelf — streak counter, currently reading, want to read, finished |
-| `/search`   | Filters the sample catalogue by title, author, genre or year      |
+| `/search`   | Live Google Books search, with the sample catalogue as fallback   |
 | `/insights` | Four stat tiles, pages-by-month line, books-by-genre bars         |
 | `/settings` | Placeholder reminders, daily goal, data reset, about             |
 
@@ -74,7 +76,7 @@ Shared primitives live in [`components/ui.tsx`](components/ui.tsx).
 ## Structure
 
 ```
-app/            routes, manifest.json, global tokens
+app/            routes, api/books, manifest.json, global tokens
 components/     screens, cards, shared primitives, charts/
 lib/            types, catalog, storage, domain logic, derived stats
 public/         sw.js, generated icons
@@ -84,7 +86,8 @@ scripts/        icon generator
 `lib/` holds all the logic and none of the React:
 
 - [`types.ts`](lib/types.ts) — transport-agnostic domain types
-- [`catalog.ts`](lib/catalog.ts) — the sample catalogue and genre colours
+- [`catalog.ts`](lib/catalog.ts) — search with fallback, sample catalogue, genre colours
+- [`googleBooks.ts`](lib/googleBooks.ts) — Google Books mapping, dedupe and ranking
 - [`storage.ts`](lib/storage.ts) — the `LibraryRepository` interface
 - [`library.ts`](lib/library.ts) — pure state transitions (add, start, log, finish)
 - [`streaks.ts`](lib/streaks.ts), [`insights.ts`](lib/insights.ts) — derived figures
@@ -94,24 +97,51 @@ scripts/        icon generator
 derives the streak and insights from it, and writes through to the repository.
 No component touches storage directly.
 
-## Swapping in the real thing
+## Google Books
 
-Both stand-ins sit behind an async seam, so neither swap reaches the UI.
+Search calls [`/api/books`](app/api/books/route.ts), which holds the API key
+server-side and proxies Google Books. The key is never sent to the browser.
 
-**Google Books.** `searchCatalog(query)` in [`lib/catalog.ts`](lib/catalog.ts) is
-already async and already has callers handling a pending state. Replace its body
-with a `fetch` to a route handler that proxies
-`https://www.googleapis.com/books/v1/volumes?q=…` (server-side, so the key stays
-off the client) and map the response to `CatalogBook` — the field mapping is
-written out in a comment at the top of that file. Note that `volumeInfo.pageCount`
-is often missing and `categories` are uncontrolled free text; `genre` is typed as
-`string` and `spineColor()` hashes unknown categories to a stable colour for
-exactly this reason.
+```bash
+# .env.local — never NEXT_PUBLIC_, which would inline it into the bundle
+GOOGLE_BOOKS_API_KEY=AIza...
+```
 
-**A database.** Implement `LibraryRepository` — `load`, `save`, `clear` — against
-your API and pass it to `<LibraryProvider repository={…}>`. Shelf entries
-denormalize a snapshot of the book rather than referencing the catalogue, so
-they survive the catalogue swap and stay readable offline.
+Get one at [console.cloud.google.com](https://console.cloud.google.com): enable
+**Books API**, create an API key, then restrict it to Books API only. Use a
+separate key from any Maps key — Maps keys are usually HTTP-referrer
+restricted, only one application restriction can be active per key, and a
+server request carries no referrer. Anonymous access is not a fallback: Google
+now caps the keyless quota at zero, so unkeyed requests return 429.
+
+**Search always returns something.** With no key, no network, or an exhausted
+quota, `searchCatalog` falls back to the twelve-book sample catalogue and the
+UI says which one answered — see `CatalogResults.reason`. That is also what the
+installed app shows offline.
+
+### What the raw API needs before it can drive a tracker
+
+Google Books is a search index over every edition, not a clean catalogue.
+Measured over 100 live volumes: **22% carry no `pageCount`**, 30% no
+`categories`, a fifth are duplicate editions, and categories arrive in
+inconsistent case. [`lib/googleBooks.ts`](lib/googleBooks.ts) handles all of it,
+and every rule there is pure and unit-tested:
+
+| Problem | What happens |
+| --- | --- |
+| No `pageCount` | Dropped. Progress bar, slider and percentage are all defined against it, so the book cannot be tracked. |
+| Duplicate editions | Collapsed on title + author, ignoring subtitles and `(Movie Tie-In)`-style markers; the best-described edition wins. |
+| Summaries and study guides | Ranked below real editions, matched on title, category *and* author — the mills publish as "Book Summary", "Hyper Summary". |
+| Inconsistent category case | Normalized, so one genre cannot draw as two bars in the chart. |
+| Category free text | `genre` is `string`, not an enum; `spineColor()` hashes unknown ones to a stable colour. A few aliases map common Google categories onto the app's own genres. |
+| Descriptions | Several hundred words, with HTML, entities and mojibake. Cleaned and trimmed to ~180 characters. |
+
+### Still to swap: the database
+
+Implement `LibraryRepository` — `load`, `save`, `clear` — against your API and
+pass it to `<LibraryProvider repository={…}>`. Shelf entries denormalize a
+snapshot of the book rather than referencing the catalogue, so they survive
+both swaps and stay readable offline.
 
 ## PWA
 
@@ -146,3 +176,5 @@ in place and correct, but the install itself is untested.
   standalone mode, at the cost of pinch zoom — drop it from `viewport` in
   [`app/layout.tsx`](app/layout.tsx) if you would rather keep zoom
 - The sample shelf is seeded on first run; Settings → Data resets or clears it
+- Books with no page count are hidden from search — about a fifth of real
+  Google Books results, including some legitimate editions
