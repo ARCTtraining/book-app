@@ -10,6 +10,32 @@ npm run dev          # http://localhost:3000
 npm run build && npm start   # service worker only registers in production
 ```
 
+## Tests
+
+```bash
+npm test             # 59 unit tests over lib/ (vitest)
+npm run test:watch
+npm run lint
+npx tsc --noEmit
+
+# End-to-end PWA checks. Needs a production build already serving:
+npm run build && npm start
+npm run verify:pwa   # in a second terminal
+```
+
+`npm test` covers the domain logic in `lib/` — streak edges, same-day log
+folding, page clamping, pace windows, genre grouping, date-key handling across
+month and year boundaries, and the internal consistency of the sample shelf.
+No DOM, no mocking; the modules are pure.
+
+`npm run verify:pwa` drives headless Chrome over the DevTools Protocol at a
+390×844 viewport and checks the things a unit test cannot: the worker installs
+and takes control, the shell precaches, an edited shelf survives a reload
+without being re-seeded, every screen still renders with the network cut for
+*both the page and the worker*, and no screen scrolls sideways. It reads
+`CHROME_PATH` if your browser is somewhere unusual, and takes a target URL:
+`npm run verify:pwa -- http://localhost:3111`.
+
 ## Screens
 
 | Route       | What it is                                                      |
@@ -107,15 +133,7 @@ assets".
 Safe-area insets are handled on the masthead and tab bar, and the status bar is
 `black-translucent` so the navy masthead runs under it once installed.
 
-### Verified
-
-Against a production build, driven through the DevTools Protocol at a 390×844
-viewport: service worker activates and controls the page; `/`, `/search`,
-`/insights`, `/settings` and `/manifest.json` are precached; the shelf seeds on
-first run, survives a reload and is not re-seeded over; and with the network cut
-for both the page *and* the service worker, navigation still renders a full
-screen with tab bar, stat tiles and both charts. No horizontal overflow on any
-screen.
+All of this is checked by `npm run verify:pwa` — see [Tests](#tests).
 
 Not verified: installation to an iOS home screen via Safari. That needs a real
 device — the manifest, `apple-touch-icon` and `apple-mobile-web-app-*` tags are
