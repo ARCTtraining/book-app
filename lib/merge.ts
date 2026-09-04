@@ -53,18 +53,27 @@ export function mergeTombstones(
  * progress rather than by adding the two together.
  */
 export function mergeLogs(mine: ProgressLog[], theirs: ProgressLog[]): ProgressLog[] {
-  const merged = new Map<string, ProgressLog>();
+  // First by id. Ids are generated once per record, so two logs sharing one
+  // are the same reading — typically a stale copy still on its old date
+  // beside one the repair has moved. Keyed by day alone they both survived
+  // and then collided on the primary key. The later write wins.
+  const byId = new Map<string, ProgressLog>();
   for (const log of [...theirs, ...mine]) {
-    // A day is the first ten characters, whatever the client sent. An older
-    // build could store a full timestamp here, and "2026-08-22" alongside
-    // "2026-08-22T00:00:00.000Z" is two keys that are one calendar day —
-    // they survived the merge and then collided in the database.
+    const held = byId.get(log.id);
+    if (!held || log.at >= held.at) byId.set(log.id, log);
+  }
+
+  // Then by calendar day. A day is the first ten characters, whatever the
+  // client sent: "2026-08-22" beside "2026-08-22T00:00:00.000Z" is two keys
+  // for one day, which the database rejects.
+  const byDay = new Map<string, ProgressLog>();
+  for (const log of byId.values()) {
     const day = log.day.slice(0, 10);
     const key = `${log.entryId}|${day}`;
-    const held = merged.get(key);
-    if (!held || log.pagesRead > held.pagesRead) merged.set(key, { ...log, day });
+    const held = byDay.get(key);
+    if (!held || log.pagesRead > held.pagesRead) byDay.set(key, { ...log, day });
   }
-  return [...merged.values()];
+  return [...byDay.values()];
 }
 
 /** Applies tombstones, keeping any entry edited after it was deleted. */

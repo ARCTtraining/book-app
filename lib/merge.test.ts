@@ -205,3 +205,54 @@ describe("a day is a day, whatever form it arrives in", () => {
     expect(mergeLogs([a], [b])).toHaveLength(2);
   });
 });
+
+describe("one id is one record", () => {
+  const at = (iso: string) => iso;
+
+  it("collapses a stale copy of a log the repair has moved", () => {
+    // Production hit this as a primary-key violation: the database still
+    // held the log on its old date while the device had moved it.
+    const stale: ProgressLog = {
+      id: "same", entryId: "e", day: "2026-09-04",
+      pagesRead: 245, page: 245, at: at("2026-09-03T21:58:00.000Z"),
+    };
+    const moved: ProgressLog = {
+      ...stale, day: "2026-08-22", at: at("2026-09-04T10:00:00.000Z"),
+    };
+
+    const merged = mergeLogs([moved], [stale]);
+    expect(merged).toHaveLength(1);
+    // The later write is the repaired one.
+    expect(merged[0].day).toBe("2026-08-22");
+  });
+
+  it("resolves the same pair whichever device syncs first", () => {
+    const stale: ProgressLog = {
+      id: "same", entryId: "e", day: "2026-09-04",
+      pagesRead: 245, page: 245, at: at("2026-09-03T21:58:00.000Z"),
+    };
+    const moved: ProgressLog = {
+      ...stale, day: "2026-08-22", at: at("2026-09-04T10:00:00.000Z"),
+    };
+    expect(mergeLogs([stale], [moved])).toEqual(mergeLogs([moved], [stale]));
+  });
+
+  it("never emits two logs sharing an id", () => {
+    const a: ProgressLog = {
+      id: "x", entryId: "e", day: "2026-01-01", pagesRead: 10, page: 10, at: "2026-01-01",
+    };
+    const b: ProgressLog = { ...a, day: "2026-02-02", at: "2026-02-02" };
+    const c: ProgressLog = { ...a, day: "2026-03-03", at: "2026-03-03" };
+
+    const merged = mergeLogs([a, b], [c]);
+    expect(new Set(merged.map((l) => l.id)).size).toBe(merged.length);
+  });
+
+  it("keeps distinct logs on distinct days apart", () => {
+    const a: ProgressLog = {
+      id: "a", entryId: "e", day: "2026-01-01", pagesRead: 10, page: 10, at: "2026-01-01",
+    };
+    const b: ProgressLog = { ...a, id: "b", day: "2026-01-02", at: "2026-01-02" };
+    expect(mergeLogs([a, b], [])).toHaveLength(2);
+  });
+});
