@@ -17,6 +17,48 @@ import {
   cx,
 } from "./ui";
 
+/**
+ * Remove, behind a confirmation.
+ *
+ * Taking a book off the shelf also drops its progress logs, so a finished
+ * book with a year of reading behind it should not go on one tap.
+ */
+function RemoveButton({ entry }: { entry: ShelfEntry }) {
+  const { removeEntry } = useLibrary();
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <Button
+        variant="quiet"
+        className="min-h-0 px-1 py-0.5 text-[10px]"
+        onClick={() => setConfirming(true)}
+      >
+        Remove
+      </Button>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <Button
+        variant="danger"
+        className="min-h-0 px-1.5 py-0.5 text-[10px]"
+        onClick={() => removeEntry(entry.id)}
+      >
+        Remove?
+      </Button>
+      <Button
+        variant="quiet"
+        className="min-h-0 px-1 py-0.5 text-[10px]"
+        onClick={() => setConfirming(false)}
+      >
+        Keep
+      </Button>
+    </span>
+  );
+}
+
 /** Title + author block shared by every card. */
 function BookHeading({
   book,
@@ -216,6 +258,10 @@ export function CurrentlyReadingCard({ entry }: { entry: ShelfEntry }) {
           Mark finished
         </Button>
       </div>
+
+      <div className="mt-1.5 flex justify-end">
+        <RemoveButton entry={entry} />
+      </div>
     </IndexCard>
   );
 }
@@ -223,7 +269,7 @@ export function CurrentlyReadingCard({ entry }: { entry: ShelfEntry }) {
 /* -------------------------------------------------------------------------- */
 
 export function WantToReadCard({ entry }: { entry: ShelfEntry }) {
-  const { startReading, removeEntry } = useLibrary();
+  const { startReading } = useLibrary();
 
   return (
     <IndexCard spine={spineColor(entry.book.genre)}>
@@ -237,13 +283,7 @@ export function WantToReadCard({ entry }: { entry: ShelfEntry }) {
           <Button variant="primary" onClick={() => startReading(entry.id)}>
             Start
           </Button>
-          <Button
-            variant="quiet"
-            className="min-h-0 px-1 py-0.5 text-[10px]"
-            onClick={() => removeEntry(entry.id)}
-          >
-            Remove
-          </Button>
+          <RemoveButton entry={entry} />
         </div>
       </div>
     </IndexCard>
@@ -281,13 +321,16 @@ export function FinishedCard({ entry }: { entry: ShelfEntry }) {
               formatDayRange(dayOf(entry.startedAt), dayOf(entry.finishedAt)),
             ]}
           />
-          <Button
-            variant="quiet"
-            className="mt-1 min-h-0 px-0 py-0.5 text-[10px]"
-            onClick={() => setEditing(true)}
-          >
-            Edit dates
-          </Button>
+          <div className="mt-1 flex items-center gap-2">
+            <Button
+              variant="quiet"
+              className="min-h-0 px-0 py-0.5 text-[10px]"
+              onClick={() => setEditing(true)}
+            >
+              Edit dates
+            </Button>
+            <RemoveButton entry={entry} />
+          </div>
         </div>
         {finished && (
           <DateStamp

@@ -5,6 +5,7 @@ import type {
   Settings,
   ShelfEntry,
   ShelfStatus,
+  Tier,
 } from "./types";
 import { dayOf, isoFromDay, todayKey, type DayKey } from "./dates";
 
@@ -26,11 +27,57 @@ function newId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Identity of a *work*, ignoring which edition it is.
+ *
+ * Lowercased, subtitle dropped, punctuation stripped — the same shape the
+ * catalogue uses to collapse editions in search results.
+ */
+function workKey(book: CatalogBook): string {
+  const title = book.title
+    .replace(/[([][^)\]]*[)\]]/g, " ")
+    .split(":")[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${title}|${book.author.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+}
+
+/**
+ * Finds a book already on the shelf, whichever edition it was added as.
+ *
+ * Matching on the catalogue id alone let the same book on twice: one copy
+ * added from the bundled sample catalogue and one from Google Books have
+ * different ids *and* different ISBNs — Piranesi arrived as both a 245-page
+ * and a 272-page edition. Title and author are what actually identify the
+ * book to the reader, so they decide.
+ */
 export function findEntryByBook(
   state: LibraryState,
-  bookId: string
+  book: CatalogBook | string
 ): ShelfEntry | undefined {
-  return state.entries.find((entry) => entry.book.id === bookId);
+  if (typeof book === "string") {
+    return state.entries.find((entry) => entry.book.id === book);
+  }
+
+  const key = workKey(book);
+  return state.entries.find(
+    (entry) =>
+      entry.book.id === book.id ||
+      (Boolean(book.isbn13) && entry.book.isbn13 === book.isbn13) ||
+      workKey(entry.book) === key
+  );
+}
+
+/** Every book on the shelf that shares a work with another. */
+export function duplicateGroups(state: LibraryState): ShelfEntry[][] {
+  const groups = new Map<string, ShelfEntry[]>();
+  for (const entry of state.entries) {
+    const key = workKey(entry.book);
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
 }
 
 /**
@@ -44,7 +91,7 @@ export function addToShelf(
   book: CatalogBook,
   status: ShelfStatus
 ): LibraryState {
-  const existing = findEntryByBook(state, book.id);
+  const existing = findEntryByBook(state, book);
   if (existing) {
     return status === "reading" && existing.status !== "reading"
       ? startReading(state, existing.id)
@@ -261,7 +308,7 @@ export function addFinishedBook(
 ): LibraryState {
   if (validateEntryDates(dates.startedAt, dates.finishedAt)) return state;
 
-  const existing = findEntryByBook(state, book.id);
+  const existing = findEntryByBook(state, book);
   const id = existing?.id ?? newId();
 
   const entry: ShelfEntry = {
@@ -313,6 +360,23 @@ export function removeEntry(state: LibraryState, entryId: string): LibraryState 
       { id: entryId, deletedAt: new Date().toISOString() },
     ],
   };
+}
+
+/**
+ * Places a book in a tier-list band, or clears it.
+ *
+ * A tier is an absolute property of the book, so two devices ranking apart
+ * merge through `updatedAt` like any other edit — nothing to renumber.
+ */
+export function setTier(
+  state: LibraryState,
+  entryId: string,
+  tier: Tier | null
+): LibraryState {
+  return mapEntry(state, entryId, (entry) => ({
+    ...entry,
+    tier: tier ?? undefined,
+  }));
 }
 
 export function updateSettings(

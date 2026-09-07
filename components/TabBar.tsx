@@ -12,6 +12,7 @@ import { cx } from "./ui";
 const TABS = [
   { href: "/search", label: "Search", Icon: SearchIcon },
   { href: "/", label: "Shelf", Icon: ShelfIcon },
+  { href: "/tiers", label: "Tiers", Icon: TiersIcon },
   { href: "/insights", label: "Insights", Icon: InsightsIcon },
 ] as const;
 
@@ -83,6 +84,17 @@ function ShelfIcon() {
       <rect x="3.5" y="5" width="4" height="14" rx="1" />
       <rect x="9.5" y="5" width="4" height="14" rx="1" />
       <path d="m16.4 6.6 3.6 1-3 12-3.6-1z" />
+    </svg>
+  );
+}
+
+/** Stacked bands, the shape of a tier list. */
+function TiersIcon() {
+  return (
+    <svg {...iconProps}>
+      <rect x="3.5" y="4.5" width="17" height="4" rx="1" />
+      <rect x="3.5" y="10" width="17" height="4" rx="1" />
+      <rect x="3.5" y="15.5" width="17" height="4" rx="1" />
     </svg>
   );
 }

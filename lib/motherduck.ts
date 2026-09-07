@@ -54,6 +54,7 @@ interface EntryRow {
   started_at: Date | null;
   finished_at: Date | null;
   updated_at: Date;
+  tier: string | null;
   isbn13: string | null;
   title: string;
   author: string;
@@ -87,6 +88,7 @@ function toEntry(row: EntryRow): ShelfEntry {
     startedAt: iso(row.started_at),
     finishedAt: iso(row.finished_at),
     updatedAt: iso(row.updated_at)!,
+    tier: (row.tier as ShelfEntry["tier"]) ?? undefined,
   };
 }
 
@@ -103,7 +105,7 @@ async function readOn(client: Client): Promise<Mergeable> {
   {
     const entries = await client.query<EntryRow>(`
       SELECT e.id, e.book_id, e.status, e.current_page, e.added_at,
-             e.started_at, e.finished_at, e.updated_at,
+             e.started_at, e.finished_at, e.updated_at, e.tier,
              b.isbn13, b.title, b.author, b.page_count, b.genre, b.year,
              b.blurb, b.thumbnail_url
       FROM shelf_entries e
@@ -204,10 +206,10 @@ async function writeOn(client: Client, state: Mergeable): Promise<void> {
       await insertRows(
         client,
         "shelf_entries",
-        ["id", "book_id", "status", "current_page", "added_at", "started_at", "finished_at", "updated_at"],
+        ["id", "book_id", "status", "current_page", "added_at", "started_at", "finished_at", "updated_at", "tier"],
         state.entries.map((e) => [
           e.id, e.book.id, e.status, e.currentPage, e.addedAt,
-          e.startedAt ?? null, e.finishedAt ?? null, e.updatedAt,
+          e.startedAt ?? null, e.finishedAt ?? null, e.updatedAt, e.tier ?? null,
         ])
       );
 

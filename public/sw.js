@@ -6,7 +6,7 @@
  * hashed assets". Bump CACHE_VERSION to retire every old cache at once.
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const SHELL_CACHE = `reading-log-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `reading-log-assets-${CACHE_VERSION}`;
 
@@ -14,6 +14,7 @@ const ASSET_CACHE = `reading-log-assets-${CACHE_VERSION}`;
 const SHELL_URLS = [
   "/",
   "/search",
+  "/tiers",
   "/insights",
   "/settings",
   "/manifest.json",

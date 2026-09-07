@@ -30,6 +30,15 @@ export interface CatalogBook {
 export type ShelfStatus = "want" | "reading" | "finished";
 
 /**
+ * A tier-list band, best to worst.
+ *
+ * A tier is an absolute property of a book, not a position relative to the
+ * others, so two devices ranking independently merge on `updatedAt` like any
+ * other edit — no renumbering, and no two books fighting over first place.
+ */
+export type Tier = "S" | "A" | "B" | "C" | "D" | "E" | "F";
+
+/**
  * A book on the user's shelf.
  *
  * `book` is a denormalized snapshot rather than a catalog reference, so shelf
@@ -51,6 +60,8 @@ export interface ShelfEntry {
    * that has been offline cannot clobber newer edits made elsewhere.
    */
   updatedAt: string;
+  /** Tier-list band, if the reader has placed it. */
+  tier?: Tier;
 }
 
 /**

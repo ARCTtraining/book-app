@@ -101,9 +101,16 @@ export function InsightsScreen() {
 function ReadingRecord({ record }: { record: InsightsSummary["record"] }) {
   const rows: { label: string; value: string; note?: string }[] = [];
 
-  for (const { author, books } of record.topAuthors) {
-    rows.push({ label: "Most read", value: author, note: `${books} books` });
-  }
+  // One label for the group: repeating "Most read" down the panel read as a
+  // bug, and the second row is only ever the runner-up.
+  record.topAuthors.forEach(({ author, books }, index) => {
+    rows.push({
+      label: index === 0 ? "Most read" : "",
+      value: author,
+      note: `${books} books`,
+    });
+  });
+
   if (record.longestBook) {
     rows.push({
       label: "Longest book",

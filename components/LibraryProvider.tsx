@@ -17,6 +17,7 @@ import type {
   Settings,
   ShelfStatus,
   StreakSummary,
+  Tier,
 } from "@/lib/types";
 import * as library from "@/lib/library";
 import { computeInsights } from "@/lib/insights";
@@ -53,6 +54,7 @@ interface LibraryContextValue {
   moveToWantToRead: (entryId: string) => void;
   updateProgress: (entryId: string, page: number) => void;
   markFinished: (entryId: string) => void;
+  setTier: (entryId: string, tier: Tier | null) => void;
   setEntryDates: (
     entryId: string,
     dates: { startedAt?: DayKey | null; finishedAt?: DayKey | null }
@@ -130,6 +132,10 @@ export function LibraryProvider({
 
   const markFinished = useCallback((entryId: string) => {
     setState((current) => library.markFinished(current, entryId));
+  }, []);
+
+  const setTier = useCallback((entryId: string, tier: Tier | null) => {
+    setState((current) => library.setTier(current, entryId, tier));
   }, []);
 
   const setEntryDates = useCallback<LibraryContextValue["setEntryDates"]>(
@@ -270,6 +276,7 @@ export function LibraryProvider({
       moveToWantToRead,
       updateProgress,
       markFinished,
+      setTier,
       setEntryDates,
       addFinishedBook,
       logPagesToday,
@@ -292,6 +299,7 @@ export function LibraryProvider({
       moveToWantToRead,
       updateProgress,
       markFinished,
+      setTier,
       setEntryDates,
       addFinishedBook,
       logPagesToday,

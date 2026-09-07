@@ -215,7 +215,7 @@ const shell = await evaluate(`
   })()
 `);
 check("creates the shell cache", shell.keys.some((k) => k.startsWith("reading-log-shell")), shell.keys);
-for (const url of ["/", "/search", "/insights", "/settings", "/manifest.json"]) {
+for (const url of ["/", "/search", "/tiers", "/insights", "/settings", "/manifest.json"]) {
   check(`precaches ${url}`, shell.cached.includes(url), shell.cached);
 }
 
@@ -313,7 +313,7 @@ const offline = await poll(`(() => {
   };
 })()`);
 check("still renders a full screen", offline.title === "Insights", offline);
-check("tab bar survives", offline.tabs === 3, offline);
+check("tab bar survives", offline.tabs === 4, offline);
 check("stat tiles render", offline.tiles === 5, offline);
 check("the pages chart renders", offline.charts >= 1, offline);
 
@@ -321,7 +321,7 @@ console.log("\nlayout");
 await send("Network.emulateNetworkConditions", {
   offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
 });
-for (const [name, path] of [["shelf", "/"], ["search", "/search"], ["insights", "/insights"], ["settings", "/settings"]]) {
+for (const [name, path] of [["shelf", "/"], ["search", "/search"], ["tiers", "/tiers"], ["insights", "/insights"], ["settings", "/settings"]]) {
   await go(BASE + path);
   await poll(`({ done: !!document.querySelector('main h1') })`);
   const m = await evaluate(`({
