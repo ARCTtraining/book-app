@@ -239,14 +239,26 @@ check("the empty shelf invites a first book", fresh.invites, fresh);
 await evaluate(`
   (() => {
     const now = new Date().toISOString();
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     localStorage.setItem('reading-log/library', JSON.stringify({
       version: 1,
-      entries: [{
-        id: 'e1',
-        book: { id: 'b1', title: 'A Tracked Book', author: 'A N Author',
-                pageCount: 300, genre: 'Fiction' },
-        status: 'reading', currentPage: 123, addedAt: now, startedAt: now
-      }],
+      entries: [
+        {
+          id: 'e1',
+          book: { id: 'b1', title: 'A Tracked Book', author: 'A N Author',
+                  pageCount: 300, genre: 'Fiction' },
+          status: 'reading', currentPage: 123, addedAt: now, startedAt: now
+        },
+        // Finished, with both dates: the reading-time chart has nothing to
+        // draw without one, and an in-progress book has no duration.
+        {
+          id: 'e2',
+          book: { id: 'b2', title: 'A Finished Book', author: 'A N Author',
+                  pageCount: 200, genre: 'Fiction' },
+          status: 'finished', currentPage: 200, addedAt: weekAgo,
+          startedAt: weekAgo, finishedAt: now, updatedAt: now
+        }
+      ],
       logs: [],
       settings: {}
     }));
@@ -264,7 +276,7 @@ const survived = await poll(`(() => {
     titles
   };
 })()`);
-check("keeps a saved shelf across a reload", survived.count === 1, survived);
+check("keeps a saved shelf across a reload", survived.count === 2, survived);
 check("keeps the reading position", survived.page === 123, survived);
 check("renders the stored book, never a sample over it", survived.titles.includes("A Tracked Book"), survived.titles);
 
@@ -315,7 +327,7 @@ const offline = await poll(`(() => {
 check("still renders a full screen", offline.title === "Insights", offline);
 check("tab bar survives", offline.tabs === 4, offline);
 check("stat tiles render", offline.tiles === 5, offline);
-check("the pages chart renders", offline.charts >= 1, offline);
+check("both charts render", offline.charts >= 2, offline);
 
 console.log("\nlayout");
 await send("Network.emulateNetworkConditions", {

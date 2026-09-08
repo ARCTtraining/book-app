@@ -55,6 +55,7 @@ export function computeInsights(
     booksOnShelf,
     pagesByMonth: pagesByMonth(state, today),
     record: readingRecord(state),
+    readingTimes: readingTimes(state),
   };
 }
 
@@ -168,6 +169,51 @@ function readingRecord(state: LibraryState): InsightsSummary["record"] {
     // the difference between the two is how much of the year you were reading.
     pagesPerReadingDay: totalDays ? Math.round(pagesWhileReading / totalDays) : 0,
   };
+}
+
+/**
+ * Buckets for how long books take.
+ *
+ * Uneven on purpose: most books land inside a fortnight, so even weekly bands
+ * would put nearly everything in two columns and leave the tail empty. These
+ * split the crowded end finely and let the long reads share a bin.
+ */
+const TIME_BUCKETS: { label: string; min: number; max: number }[] = [
+  { label: "1–3", min: 1, max: 3 },
+  { label: "4–7", min: 4, max: 7 },
+  { label: "8–14", min: 8, max: 14 },
+  { label: "15–21", min: 15, max: 21 },
+  { label: "22–30", min: 22, max: 30 },
+  { label: "31+", min: 31, max: Infinity },
+];
+
+/**
+ * How long finished books took, as a distribution.
+ *
+ * Only books with both a start and a finish can be counted, so the total is
+ * reported alongside — a book backfilled without a start date is absent, and
+ * the chart should not quietly disagree with "books finished".
+ */
+function readingTimes(state: LibraryState): InsightsSummary["readingTimes"] {
+  const days = state.entries
+    .filter((entry) => entry.status === "finished")
+    .map(daysToFinish)
+    .filter((value): value is number => value !== null)
+    .sort((a, b) => a - b);
+
+  const buckets = TIME_BUCKETS.map(({ label, min, max }) => ({
+    label,
+    books: days.filter((d) => d >= min && d <= max).length,
+  }));
+
+  // Median rather than mean: one 33-day book drags an average of twenty.
+  const median = days.length
+    ? days.length % 2
+      ? days[(days.length - 1) / 2]
+      : Math.round((days[days.length / 2 - 1] + days[days.length / 2]) / 2)
+    : 0;
+
+  return { buckets, counted: days.length, median };
 }
 
 /** Pages logged in each month of the year so far, gaps filled with 0. */

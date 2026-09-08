@@ -145,4 +145,16 @@ export interface InsightsSummary {
     /** Pages per day spent inside a book, not per calendar day. */
     pagesPerReadingDay: number;
   };
+  /**
+   * How long finished books took, bucketed.
+   *
+   * `counted` can be lower than `booksFinished`: a book backfilled without a
+   * start date has no duration to bucket.
+   */
+  readingTimes: {
+    buckets: { label: string; books: number }[];
+    counted: number;
+    /** Median days, which one very long read cannot distort. */
+    median: number;
+  };
 }

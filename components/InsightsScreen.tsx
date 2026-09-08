@@ -3,6 +3,7 @@
 import type { InsightsSummary } from "@/lib/types";
 import { useLibrary } from "./LibraryProvider";
 import { PagesByMonthChart } from "./charts/PagesByMonthChart";
+import { ReadingTimeChart } from "./charts/ReadingTimeChart";
 import { cx, EmptyState, LoadingRules, PageTitle } from "./ui";
 
 /**
@@ -85,6 +86,7 @@ export function InsightsScreen() {
         </div>
 
         <PagesByMonthChart data={insights.pagesByMonth} />
+        <ReadingTimeChart data={insights.readingTimes} />
         <ReadingRecord record={insights.record} />
       </div>
     </>

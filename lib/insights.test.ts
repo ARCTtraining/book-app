@@ -257,3 +257,75 @@ describe("the reading record", () => {
     expect(record.pagesPerReadingDay).toBe(0);
   });
 });
+
+describe("how long books take", () => {
+  const book = (pageCount: number) => ({ ...piranesi, id: `b${pageCount}`, pageCount });
+
+  /** A finished book that took `days`, ending today. */
+  function tookDays(days: number, i: number) {
+    return {
+      id: `e${i}`,
+      book: book(200 + i),
+      status: "finished" as const,
+      currentPage: 200 + i,
+      addedAt: "x",
+      updatedAt: "x",
+      startedAt: isoFromDay(shiftDay("2026-09-01", -days)),
+      finishedAt: isoFromDay("2026-09-01"),
+    };
+  }
+
+  const shelfOf = (...days: number[]): LibraryState => ({
+    ...emptyState(),
+    entries: days.map(tookDays),
+  });
+
+  it("buckets by duration, keeping every band on the axis", () => {
+    const { buckets } = computeInsights(shelfOf(2, 5, 10, 33), "2026-09-04").readingTimes;
+
+    expect(buckets.map((b) => b.label)).toEqual(["1–3", "4–7", "8–14", "15–21", "22–30", "31+"]);
+    expect(buckets.map((b) => b.books)).toEqual([1, 1, 1, 0, 0, 1]);
+  });
+
+  it("puts a very long read in the open-ended bucket", () => {
+    const { buckets } = computeInsights(shelfOf(400), "2026-09-04").readingTimes;
+    expect(buckets.at(-1)!.books).toBe(1);
+  });
+
+  it("counts a same-day read as one day, not none", () => {
+    const { buckets, median } = computeInsights(shelfOf(0), "2026-09-04").readingTimes;
+    expect(buckets[0].books).toBe(1);
+    expect(median).toBe(1);
+  });
+
+  it("reports the median, which one long read cannot distort", () => {
+    // Mean of these is 12; the median is 5, which describes the shelf better.
+    const { median } = computeInsights(shelfOf(3, 4, 5, 6, 42), "2026-09-04").readingTimes;
+    expect(median).toBe(5);
+  });
+
+  it("averages the middle pair when the count is even", () => {
+    const { median } = computeInsights(shelfOf(4, 6), "2026-09-04").readingTimes;
+    expect(median).toBe(5);
+  });
+
+  it("skips a book with no start date rather than guessing", () => {
+    // Backfilled books need not have one, and the count says so.
+    const state: LibraryState = {
+      ...emptyState(),
+      entries: [
+        tookDays(5, 1),
+        { ...tookDays(5, 2), startedAt: undefined },
+      ],
+    };
+    const { counted } = computeInsights(state, "2026-09-04").readingTimes;
+    expect(counted).toBe(1);
+  });
+
+  it("is empty, not broken, on a shelf with nothing finished", () => {
+    const { buckets, counted, median } = computeInsights(emptyState(), "2026-09-04").readingTimes;
+    expect(counted).toBe(0);
+    expect(median).toBe(0);
+    expect(buckets.every((b) => b.books === 0)).toBe(true);
+  });
+});
