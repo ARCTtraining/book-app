@@ -1,4 +1,4 @@
-import type { InsightsSummary, LibraryState } from "./types";
+import type { InsightsSummary, LibraryState, ShelfEntry } from "./types";
 import {
   dayOf,
   daysBetween,
@@ -195,16 +195,30 @@ const TIME_BUCKETS: { label: string; min: number; max: number }[] = [
  * the chart should not quietly disagree with "books finished".
  */
 function readingTimes(state: LibraryState): InsightsSummary["readingTimes"] {
-  const days = state.entries
+  const timed = state.entries
     .filter((entry) => entry.status === "finished")
-    .map(daysToFinish)
-    .filter((value): value is number => value !== null)
-    .sort((a, b) => a - b);
+    .map((entry) => ({ entry, days: daysToFinish(entry) }))
+    .filter((x): x is { entry: ShelfEntry; days: number } => x.days !== null)
+    .sort((a, b) => a.days - b.days);
 
-  const buckets = TIME_BUCKETS.map(({ label, min, max }) => ({
-    label,
-    books: days.filter((d) => d >= min && d <= max).length,
-  }));
+  const days = timed.map((x) => x.days);
+
+  const buckets = TIME_BUCKETS.map(({ label, min, max }) => {
+    const inBand = timed.filter((x) => x.days >= min && x.days <= max);
+    return {
+      label,
+      books: inBand.length,
+      // The books themselves, so the bar can be drawn out of their covers
+      // rather than as an abstract length.
+      covers: inBand.map(({ entry, days: took }) => ({
+        id: entry.id,
+        title: entry.book.title,
+        author: entry.book.author,
+        thumbnailUrl: entry.book.thumbnailUrl,
+        days: took,
+      })),
+    };
+  });
 
   // Median rather than mean: one 33-day book drags an average of twenty.
   const median = days.length

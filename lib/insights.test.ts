@@ -329,3 +329,59 @@ describe("how long books take", () => {
     expect(buckets.every((b) => b.books === 0)).toBe(true);
   });
 });
+
+describe("the reading-time bars carry the books themselves", () => {
+  const finished = (days: number, i: number) => ({
+    id: `e${i}`,
+    book: { ...piranesi, id: `b${i}`, title: `Book ${i}`, thumbnailUrl: `https://x/${i}.jpg` },
+    status: "finished" as const,
+    currentPage: 245,
+    addedAt: "x",
+    updatedAt: "x",
+    startedAt: isoFromDay(shiftDay("2026-09-01", -days)),
+    finishedAt: isoFromDay("2026-09-01"),
+  });
+
+  it("puts each book in its own band, with what a cover needs to render", () => {
+    const state: LibraryState = {
+      ...emptyState(),
+      entries: [finished(2, 1), finished(5, 2), finished(6, 3)],
+    };
+    const { buckets } = computeInsights(state, "2026-09-04").readingTimes;
+
+    expect(buckets[0].covers.map((c) => c.title)).toEqual(["Book 1"]);
+    expect(buckets[1].covers.map((c) => c.title)).toEqual(["Book 2", "Book 3"]);
+    expect(buckets[1].covers[0]).toMatchObject({
+      author: "Susanna Clarke",
+      thumbnailUrl: "https://x/2.jpg",
+      days: 5,
+    });
+  });
+
+  it("keeps covers and the count in step", () => {
+    const state: LibraryState = {
+      ...emptyState(),
+      entries: [finished(9, 1), finished(10, 2), finished(40, 3)],
+    };
+    const { buckets } = computeInsights(state, "2026-09-04").readingTimes;
+    for (const bucket of buckets) {
+      expect(bucket.covers).toHaveLength(bucket.books);
+    }
+  });
+
+  it("orders a band shortest first", () => {
+    const state: LibraryState = {
+      ...emptyState(),
+      entries: [finished(14, 1), finished(8, 2), finished(11, 3)],
+    };
+    const { buckets } = computeInsights(state, "2026-09-04").readingTimes;
+    expect(buckets[2].covers.map((c) => c.days)).toEqual([8, 11, 14]);
+  });
+
+  it("leaves an empty band with no covers rather than omitting it", () => {
+    const state: LibraryState = { ...emptyState(), entries: [finished(2, 1)] };
+    const { buckets } = computeInsights(state, "2026-09-04").readingTimes;
+    expect(buckets).toHaveLength(6);
+    expect(buckets[1].covers).toEqual([]);
+  });
+});

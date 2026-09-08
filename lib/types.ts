@@ -152,7 +152,18 @@ export interface InsightsSummary {
    * start date has no duration to bucket.
    */
   readingTimes: {
-    buckets: { label: string; books: number }[];
+    buckets: {
+      label: string;
+      books: number;
+      /** The books in this band, so it can be drawn from their covers. */
+      covers: {
+        id: string;
+        title: string;
+        author: string;
+        thumbnailUrl?: string;
+        days: number;
+      }[];
+    }[];
     counted: number;
     /** Median days, which one very long read cannot distort. */
     median: number;
