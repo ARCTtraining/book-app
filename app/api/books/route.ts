@@ -37,7 +37,10 @@ export async function GET(request: Request) {
       }
     );
   } catch (error) {
-    const status = error instanceof GoogleBooksError ? error.status : 502;
+    // Only a quota 429 passes through. Any other upstream failure is a 502:
+    // passing Google's own 503 along would read as "no key" to the client.
+    const status =
+      error instanceof GoogleBooksError && error.status === 429 ? 429 : 502;
     const message =
       error instanceof GoogleBooksError ? error.message : "Catalogue search failed";
     console.error("[api/books]", message);
