@@ -209,6 +209,64 @@ export async function getCatalogBook(id: string): Promise<CatalogBook | null> {
   return SAMPLE_CATALOG.find((book) => book.id === id) ?? null;
 }
 
+/** What the reader types for a book no catalogue has. */
+export interface CustomBookFields {
+  title: string;
+  author: string;
+  pageCount: string;
+  genre: string;
+  year: string;
+}
+
+/**
+ * Why the fields cannot make a book yet, or null when they can.
+ *
+ * Page count is required: progress, the bookmark slider and every insight
+ * divide by it.
+ */
+export function validateCustomBook(fields: CustomBookFields): string | null {
+  if (!fields.title.trim()) return "Give the book a title.";
+  if (!fields.author.trim()) return "Add an author.";
+
+  const pages = Number(fields.pageCount);
+  if (!Number.isInteger(pages) || pages < 1 || pages > 20000) {
+    return "Page count should be a whole number, 1 or more.";
+  }
+
+  if (fields.year.trim()) {
+    const year = Number(fields.year);
+    if (!Number.isInteger(year) || year < 0 || year > new Date().getFullYear() + 1) {
+      return "That year does not look right.";
+    }
+  }
+  return null;
+}
+
+/**
+ * A book typed in by the reader, for when Google Books has no record of it
+ * or cannot be reached.
+ *
+ * The `custom-` id can never collide with a Google volume id or an ISBN, and
+ * the shelf still recognises it as a duplicate of a catalogue edition by
+ * title and author.
+ */
+export function customBook(fields: CustomBookFields): CatalogBook {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  return {
+    id: `custom-${id}`,
+    title: fields.title.trim().replace(/\s+/g, " "),
+    author: fields.author.trim().replace(/\s+/g, " "),
+    pageCount: Number(fields.pageCount),
+    // Same placeholder Google Books results get when they carry no category.
+    genre: fields.genre.trim() || "Unfiled",
+    year: fields.year.trim() ? Number(fields.year) : undefined,
+  };
+}
+
 /**
  * Genre-to-spine-colour map. The spine strip on the left edge of every card
  * is the one place colour carries meaning, so it stays consistent across

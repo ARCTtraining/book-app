@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { SAMPLE_CATALOG, filterSampleCatalog, getCatalogBook, spineColor } from "./catalog";
+import {
+  SAMPLE_CATALOG,
+  customBook,
+  filterSampleCatalog,
+  getCatalogBook,
+  spineColor,
+  validateCustomBook,
+} from "./catalog";
+import { addToShelf } from "./library";
+import { emptyState } from "./storage";
 import { dayKey, formatDayRange, parseDay, shiftDay } from "./dates";
 
 describe("filterSampleCatalog", () => {
@@ -84,5 +93,52 @@ describe("dates", () => {
     expect(formatDayRange("2025-12-30", "2026-01-04")).toBe(
       "30 Dec 2025 – 4 Jan 2026"
     );
+  });
+});
+
+describe("custom books", () => {
+  const fields = {
+    title: "  The   Pamphlet ",
+    author: "A. Local Author",
+    pageCount: "48",
+    genre: "",
+    year: "",
+  };
+
+  it("needs a title, an author and a whole page count", () => {
+    expect(validateCustomBook(fields)).toBeNull();
+    expect(validateCustomBook({ ...fields, title: " " })).toMatch(/title/);
+    expect(validateCustomBook({ ...fields, author: "" })).toMatch(/author/);
+    expect(validateCustomBook({ ...fields, pageCount: "" })).toMatch(/Page count/);
+    expect(validateCustomBook({ ...fields, pageCount: "0" })).toMatch(/Page count/);
+    expect(validateCustomBook({ ...fields, pageCount: "12.5" })).toMatch(/Page count/);
+  });
+
+  it("accepts a blank year but not a nonsense one", () => {
+    expect(validateCustomBook({ ...fields, year: "1999" })).toBeNull();
+    expect(validateCustomBook({ ...fields, year: "nineteen" })).toMatch(/year/);
+    expect(validateCustomBook({ ...fields, year: "3000" })).toMatch(/year/);
+  });
+
+  it("builds a tidy book with its own id space", () => {
+    const book = customBook({ ...fields, year: "1999" });
+    expect(book.id).toMatch(/^custom-/);
+    expect(book.title).toBe("The Pamphlet");
+    expect(book.pageCount).toBe(48);
+    expect(book.genre).toBe("Unfiled");
+    expect(book.year).toBe(1999);
+    expect(customBook(fields).id).not.toBe(book.id);
+  });
+
+  it("is recognised as a book already on the shelf by title and author", () => {
+    const piranesi = SAMPLE_CATALOG[0];
+    const shelved = addToShelf(emptyState(), piranesi, "want");
+    const typed = customBook({
+      ...fields,
+      title: piranesi.title,
+      author: piranesi.author,
+      pageCount: "272",
+    });
+    expect(addToShelf(shelved, typed, "want").entries).toHaveLength(1);
   });
 });

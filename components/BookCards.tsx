@@ -93,7 +93,7 @@ const STATUS_NOTE: Record<ShelfStatus, string> = {
 /** A catalog hit on the Search screen. */
 export function SearchResultCard({ book }: { book: CatalogBook }) {
   const { addToShelf, addFinishedBook, shelfStatusOf, ready } = useLibrary();
-  const status = shelfStatusOf(book.id);
+  const status = shelfStatusOf(book);
 
   // Backfilling a book read before the app existed needs a date, so the
   // "Already read" action opens the fields rather than stamping today.

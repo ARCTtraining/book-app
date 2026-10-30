@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { searchCatalog, type CatalogResults } from "@/lib/catalog";
 import { SearchResultCard } from "./BookCards";
+import { CustomBookForm } from "./CustomBookForm";
 import { EmptyState, PageTitle } from "./ui";
 
 /** Said plainly, because the results are not what the reader asked for. */
@@ -114,6 +115,9 @@ export function SearchScreen() {
               body={`Nothing matches “${query}”. Try an author's surname, fewer words, or the book's ISBN — small-press and very recent titles are often only findable that way.`}
             />
           )}
+
+          {/* After the results, so a catalogue match is always offered first. */}
+          {query && !pending && <CustomBookForm initialTitle={query} />}
         </div>
       </div>
     </>

@@ -68,7 +68,8 @@ interface LibraryContextValue {
   updateSettings: (patch: Partial<Settings>) => void;
   loadSampleData: () => void;
   clearAll: () => void;
-  shelfStatusOf: (bookId: string) => ShelfStatus | null;
+  /** Matched the way `addToShelf` matches, so another edition counts. */
+  shelfStatusOf: (book: CatalogBook | string) => ShelfStatus | null;
   /** Pushes the shelf to MotherDuck and adopts the merged result. */
   sync: (passphrase: string) => Promise<SyncOutcome>;
   syncing: boolean;
@@ -261,7 +262,7 @@ export function LibraryProvider({
   }, [ready, runSync]);
 
   const shelfStatusOf = useCallback(
-    (bookId: string) => library.findEntryByBook(state, bookId)?.status ?? null,
+    (book: CatalogBook | string) => library.findEntryByBook(state, book)?.status ?? null,
     [state]
   );
 
